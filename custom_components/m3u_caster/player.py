@@ -105,7 +105,8 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
             "metadata": "{}",
             "cookies": "{}",
         }
-        async with session.post(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params) as resp:
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        async with session.post(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params, headers=headers) as resp:
             resp.raise_for_status()
     except aiohttp.ClientError as err:
         _LOGGER.warning("Roku ECP call to %s failed (%s); falling back to media_player.play_media", host, err)
