@@ -1,0 +1,13 @@
+{
+  "domain": "m3u_editor",
+  "name": "M3U Editor",
+  "codeowners": ["@chris"],
+  "config_flow": true,
+  "dependencies": ["media_player", "http"],
+  "after_dependencies": ["lovelace"],
+  "documentation": "https://github.com/sparkison/m3u-editor",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "2.2.0"
+}

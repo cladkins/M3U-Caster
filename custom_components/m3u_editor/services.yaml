@@ -1,0 +1,87 @@
+play_stream:
+  name: Play stream
+  description: Cast a channel by stream ID to a media player.
+  fields:
+    stream_id:
+      name: Stream ID
+      required: true
+      selector:
+        text:
+    media_player:
+      name: Media player
+      required: true
+      selector:
+        entity:
+          domain: media_player
+    cast_type:
+      name: Cast type
+      description: Auto detect uses the media player's integration. Apple TV app launches a player app by URL scheme (VLC by default).
+      default: auto
+      selector:
+        select:
+          options:
+            - label: Auto detect
+              value: auto
+            - label: Roku
+              value: roku
+            - label: Apple TV (AirPlay)
+              value: apple_tv
+            - label: Apple TV app (VLC)
+              value: apple_tv_app
+            - label: Chromecast
+              value: cast
+            - label: Generic
+              value: generic
+    app_link:
+      name: App link template
+      description: For Apple TV app. {url} is replaced with the encoded stream URL. Default is VLC.
+      required: false
+      example: "vlc-x-callback://x-callback-url/stream?url={url}"
+      selector:
+        text:
+    auto_confirm:
+      name: Auto confirm
+      description: For apple_tv_app. Press Select on the tvOS "Open in app?" prompt.
+      default: true
+      selector:
+        boolean:
+stop:
+  name: Stop
+  description: Stop playback. Sends Home on Apple TV app and Roku targets, media_stop elsewhere.
+  fields:
+    media_player:
+      name: Media player
+      required: true
+      selector:
+        entity:
+          domain: media_player
+    cast_type:
+      name: Cast type
+      default: auto
+      selector:
+        select:
+          options:
+            - label: Auto detect
+              value: auto
+            - label: Roku
+              value: roku
+            - label: Apple TV (AirPlay)
+              value: apple_tv
+            - label: Apple TV app (VLC)
+              value: apple_tv_app
+            - label: Chromecast
+              value: cast
+            - label: Generic
+              value: generic
+sync_playlist:
+  name: Sync playlist
+  description: Re-sync a playlist in m3u editor. Requires an API token.
+  fields:
+    playlist_uuid:
+      name: Playlist UUID
+      required: false
+      selector:
+        text:
+refresh:
+  name: Refresh
+  description: Re-poll channels and EPG now.
