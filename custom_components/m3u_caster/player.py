@@ -63,7 +63,9 @@ async def _async_roku_app_id(session: aiohttp.ClientSession, host: str, name: st
     Ids aren't fixed across devices, so they have to be discovered per-device
     rather than hardcoded.
     """
-    async with session.get(f"http://{host}:{ROKU_ECP_PORT}/query/apps") as resp:
+    async with session.get(
+        f"http://{host}:{ROKU_ECP_PORT}/query/apps", headers={"Connection": "close"}
+    ) as resp:
         resp.raise_for_status()
         body = await resp.text()
     try:
@@ -87,6 +89,12 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
     headers/metadata/cookies, but those made ours 404 - the minimal param set below,
     live+autoCookie+url+fmt, is what its own plain (non-DRM) stream requests use, and
     that's what actually plays here.
+
+    Even with that byte-identical param set, this still 404'd when issued from HA's
+    shared, keep-alive-pooled aiohttp session - the GET to /query/apps and the POST to
+    /launch both landing on the same reused connection to Roku's minimal embedded HTTP
+    server, unlike the one-off browser POST that worked. Forcing both calls closed
+    avoids that connection reuse.
     """
     host = _roku_host(hass, entity_id)
     if not host:
@@ -104,8 +112,10 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
             "url": url,
             "fmt": "Auto",
         }
-        headers = {"Content-Type": "application/x-www-form-urlencoded"}
-        async with session.post(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params, headers=headers) as resp:
+        headers = {"Content-Type": "application/x-www-form-urlencoded", "Connection": "close"}
+        async with session.post(
+            f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params, headers=headers, data=b""
+        ) as resp:
             resp.raise_for_status()
     except aiohttp.ClientError as err:
         _LOGGER.warning("Roku ECP call to %s failed (%s); falling back to media_player.play_media", host, err)
