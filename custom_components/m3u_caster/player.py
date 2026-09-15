@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import xml.etree.ElementTree as ET
 from typing import Any
 from urllib.parse import quote
 
+import aiohttp
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -15,6 +17,7 @@ from .const import DEFAULT_APP_LINK
 
 _LOGGER = logging.getLogger(__name__)
 ROKU_ECP_PORT = 8060
+ROKU_MEDIA_PLAYER_APP_NAME = "Roku Media Player"
 
 
 def detect_cast_type(hass: HomeAssistant, entity_id: str) -> str:
@@ -54,21 +57,50 @@ def _roku_host(hass: HomeAssistant, media_player: str) -> str | None:
     return None
 
 
+async def _async_roku_media_player_app_id(session: aiohttp.ClientSession, host: str) -> str | None:
+    """Look up the Roku Media Player system channel's app id via ECP's app list query.
+
+    This id isn't fixed across devices, so it has to be discovered per-device rather
+    than hardcoded.
+    """
+    async with session.get(f"http://{host}:{ROKU_ECP_PORT}/query/apps") as resp:
+        resp.raise_for_status()
+        body = await resp.text()
+    try:
+        root = ET.fromstring(body)
+    except ET.ParseError:
+        return None
+    for app in root.findall("app"):
+        if (app.text or "").strip() == ROKU_MEDIA_PLAYER_APP_NAME:
+            return app.get("id")
+    return None
+
+
 async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, title: str) -> bool:
-    """Send a video directly to Roku's ECP /input endpoint, bypassing HA's roku integration.
+    """Send a video directly to Roku's ECP input endpoint, bypassing HA's roku integration.
 
     HA's media_player.play_media (via the rokuecp library) throws on this device/firmware
     even though Roku accepts the command fine - it appears to choke parsing ECP's empty
-    response body. Talking to ECP directly sidesteps that.
+    response body. Talking to ECP directly sidesteps that. The bare /input path 404s on
+    current firmware; video launch has to target the Roku Media Player channel's own
+    input handler at /input/<app_id>.
     """
     host = _roku_host(hass, entity_id)
     if not host:
         _LOGGER.warning("no roku host on file for %s; falling back to media_player.play_media", entity_id)
         return False
     session = async_get_clientsession(hass)
-    params = {"t": "v", "u": url, "videoName": title, "videoFormat": "hls"}
-    async with session.post(f"http://{host}:{ROKU_ECP_PORT}/input", params=params) as resp:
-        resp.raise_for_status()
+    try:
+        app_id = await _async_roku_media_player_app_id(session, host)
+        if not app_id:
+            _LOGGER.warning("Roku Media Player channel not found on %s; falling back to media_player.play_media", host)
+            return False
+        params = {"t": "v", "u": url, "videoName": title, "videoFormat": "hls"}
+        async with session.post(f"http://{host}:{ROKU_ECP_PORT}/input/{app_id}", params=params) as resp:
+            resp.raise_for_status()
+    except aiohttp.ClientError as err:
+        _LOGGER.warning("Roku ECP call to %s failed (%s); falling back to media_player.play_media", host, err)
+        return False
     return True
 
 
