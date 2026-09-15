@@ -20,7 +20,7 @@ Auto confirm: presses Select on the tvOS "Open in app?" prompt.
 ## Notes
 
 Recent tvOS versions refuse AirPlay URL playback from Home Assistant. Auto detect therefore uses the app path for Apple TVs. Install VLC on the Apple TV, or set another player's URL scheme in the template.
-Roku uses the built-in Roku Media Player channel.
+Roku casting talks to the device's ECP API directly (`http://<roku-ip>:8060/input`), reusing the IP Home Assistant's own Roku integration already has on file. Home Assistant's built-in `media_player.play_media` path for Roku throws on some firmware even though the device accepts the command, so we bypass it rather than route through it.
 
 ## Services
 

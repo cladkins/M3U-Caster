@@ -7,11 +7,14 @@ from typing import Any
 from urllib.parse import quote
 
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import DEFAULT_APP_LINK
 
 _LOGGER = logging.getLogger(__name__)
+ROKU_ECP_PORT = 8060
 
 
 def detect_cast_type(hass: HomeAssistant, entity_id: str) -> str:
@@ -34,6 +37,41 @@ def _remote_for(hass: HomeAssistant, media_player: str) -> str | None:
     return None
 
 
+def _roku_host(hass: HomeAssistant, media_player: str) -> str | None:
+    """Look up the IP the roku integration already has on file for this media_player's device."""
+    ereg = er.async_get(hass)
+    mp = ereg.async_get(media_player)
+    if not mp or not mp.device_id:
+        return None
+    dreg = dr.async_get(hass)
+    device = dreg.async_get(mp.device_id)
+    if not device:
+        return None
+    for entry_id in device.config_entries:
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if entry and entry.domain == "roku":
+            return entry.data.get("host")
+    return None
+
+
+async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, title: str) -> bool:
+    """Send a video directly to Roku's ECP /input endpoint, bypassing HA's roku integration.
+
+    HA's media_player.play_media (via the rokuecp library) throws on this device/firmware
+    even though Roku accepts the command fine - it appears to choke parsing ECP's empty
+    response body. Talking to ECP directly sidesteps that.
+    """
+    host = _roku_host(hass, entity_id)
+    if not host:
+        _LOGGER.warning("no roku host on file for %s; falling back to media_player.play_media", entity_id)
+        return False
+    session = async_get_clientsession(hass)
+    params = {"t": "v", "u": url, "videoName": title, "videoFormat": "hls"}
+    async with session.post(f"http://{host}:{ROKU_ECP_PORT}/input", params=params) as resp:
+        resp.raise_for_status()
+    return True
+
+
 async def async_play_url(
     hass: HomeAssistant,
     entity_id: str,
@@ -45,6 +83,8 @@ async def async_play_url(
 ) -> None:
     if cast_type == "auto":
         cast_type = detect_cast_type(hass, entity_id)
+    if cast_type == "roku" and await _async_roku_ecp_play(hass, entity_id, url, title):
+        return
     data: dict[str, Any] = {"entity_id": entity_id, "media_content_id": url}
     if cast_type == "roku":
         data["media_content_type"] = "url"
