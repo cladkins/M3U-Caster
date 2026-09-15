@@ -77,13 +77,13 @@ async def _async_roku_media_player_app_id(session: aiohttp.ClientSession, host: 
 
 
 async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, title: str) -> bool:
-    """Send a video directly to Roku's ECP input endpoint, bypassing HA's roku integration.
+    """Send a video directly to Roku's ECP launch endpoint, bypassing HA's roku integration.
 
     HA's media_player.play_media (via the rokuecp library) throws on this device/firmware
-    even though Roku accepts the command fine - it appears to choke parsing ECP's empty
-    response body. Talking to ECP directly sidesteps that. The bare /input path 404s on
-    current firmware; video launch has to target the Roku Media Player channel's own
-    input handler at /input/<app_id>.
+    even though Roku accepts the command fine. Talking to ECP directly sidesteps that.
+    Both /input and /input/<app_id> 404 on current firmware; deep-linking a URL into the
+    Roku Media Player channel goes through the same /launch/<app_id> mechanism used to
+    switch apps, with the video params passed as query args.
     """
     host = _roku_host(hass, entity_id)
     if not host:
@@ -96,7 +96,7 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
             _LOGGER.warning("Roku Media Player channel not found on %s; falling back to media_player.play_media", host)
             return False
         params = {"t": "v", "u": url, "videoName": title, "videoFormat": "hls"}
-        async with session.post(f"http://{host}:{ROKU_ECP_PORT}/input/{app_id}", params=params) as resp:
+        async with session.post(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params) as resp:
             resp.raise_for_status()
     except aiohttp.ClientError as err:
         _LOGGER.warning("Roku ECP call to %s failed (%s); falling back to media_player.play_media", host, err)
