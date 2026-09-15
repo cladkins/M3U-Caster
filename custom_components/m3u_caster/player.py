@@ -17,7 +17,7 @@ from .const import DEFAULT_APP_LINK
 
 _LOGGER = logging.getLogger(__name__)
 ROKU_ECP_PORT = 8060
-ROKU_MEDIA_PLAYER_APP_NAME = "Roku Media Player"
+ROKU_STREAM_TESTER_APP_NAME = "Roku Stream Tester"
 
 
 def detect_cast_type(hass: HomeAssistant, entity_id: str) -> str:
@@ -57,11 +57,11 @@ def _roku_host(hass: HomeAssistant, media_player: str) -> str | None:
     return None
 
 
-async def _async_roku_media_player_app_id(session: aiohttp.ClientSession, host: str) -> str | None:
-    """Look up the Roku Media Player system channel's app id via ECP's app list query.
+async def _async_roku_app_id(session: aiohttp.ClientSession, host: str, name: str) -> str | None:
+    """Look up a channel's app id by name via ECP's app list query.
 
-    This id isn't fixed across devices, so it has to be discovered per-device rather
-    than hardcoded.
+    Ids aren't fixed across devices, so they have to be discovered per-device
+    rather than hardcoded.
     """
     async with session.get(f"http://{host}:{ROKU_ECP_PORT}/query/apps") as resp:
         resp.raise_for_status()
@@ -71,19 +71,19 @@ async def _async_roku_media_player_app_id(session: aiohttp.ClientSession, host: 
     except ET.ParseError:
         return None
     for app in root.findall("app"):
-        if (app.text or "").strip() == ROKU_MEDIA_PLAYER_APP_NAME:
+        if (app.text or "").strip() == name:
             return app.get("id")
     return None
 
 
 async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, title: str) -> bool:
-    """Send a video directly to Roku's ECP launch endpoint, bypassing HA's roku integration.
+    """Deep-link a video into Roku Stream Tester via ECP, bypassing HA's roku integration.
 
     HA's media_player.play_media (via the rokuecp library) throws on this device/firmware
-    even though Roku accepts the command fine. Talking to ECP directly sidesteps that.
-    Both /input and /input/<app_id> 404 on current firmware; deep-linking a URL into the
-    Roku Media Player channel goes through the same /launch/<app_id> mechanism used to
-    switch apps, with the video params passed as query args.
+    even though Roku accepts commands fine, and the direct ECP video-launch endpoints
+    (/input, /input/<app_id>) both 404 on current firmware. Roku Stream Tester's own
+    /launch/<app_id> deep link (params confirmed from a working third-party app's request
+    capture) is the path that actually works.
     """
     host = _roku_host(hass, entity_id)
     if not host:
@@ -91,11 +91,20 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
         return False
     session = async_get_clientsession(hass)
     try:
-        app_id = await _async_roku_media_player_app_id(session, host)
+        app_id = await _async_roku_app_id(session, host, ROKU_STREAM_TESTER_APP_NAME)
         if not app_id:
-            _LOGGER.warning("Roku Media Player channel not found on %s; falling back to media_player.play_media", host)
+            _LOGGER.warning("Roku Stream Tester channel not found on %s; falling back to media_player.play_media", host)
             return False
-        params = {"t": "v", "u": url, "videoName": title, "videoFormat": "hls"}
+        params = {
+            "url": url,
+            "fmt": "Auto",
+            "live": "true",
+            "autoCookie": "false",
+            "drmParams": "{}",
+            "headers": "{}",
+            "metadata": "{}",
+            "cookies": "{}",
+        }
         async with session.post(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params) as resp:
             resp.raise_for_status()
     except aiohttp.ClientError as err:

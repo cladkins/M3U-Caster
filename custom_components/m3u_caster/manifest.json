@@ -9,5 +9,5 @@
   "integration_type": "service",
   "iot_class": "cloud_polling",
   "requirements": [],
-  "version": "2.3.2"
+  "version": "2.3.3"
 }
