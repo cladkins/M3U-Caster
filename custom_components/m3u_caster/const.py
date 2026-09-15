@@ -19,6 +19,7 @@ DEFAULT_EPG_LIMIT: Final = 2
 
 CAST_TYPES: Final = ["auto", "roku", "apple_tv", "apple_tv_app", "cast", "generic"]
 DEFAULT_APP_LINK: Final = "vlc-x-callback://x-callback-url/stream?url={url}"
+DATA_NOW_CASTING: Final = f"{DOMAIN}_now_casting"
 
 SERVICE_PLAY_STREAM: Final = "play_stream"
 SERVICE_STOP: Final = "stop"

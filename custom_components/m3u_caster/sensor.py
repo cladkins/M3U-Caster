@@ -10,7 +10,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import M3UCasterConfigEntry
-from .const import CONF_PLAYLIST_NAME, DOMAIN
+from .const import CONF_PLAYLIST_NAME, DATA_NOW_CASTING, DOMAIN
 from .coordinator import M3UCasterCoordinator
 
 
@@ -36,8 +36,9 @@ class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
+        channels = (self.coordinator.data or {}).get("channels", {})
         rows = []
-        for c in (self.coordinator.data or {}).get("channels", {}).values():
+        for c in channels.values():
             now, nxt = c.get("now") or {}, c.get("next") or {}
             rows.append({
                 "stream_id": c["stream_id"], "name": c["name"], "group": c["group"], "logo": c["logo"],
@@ -45,4 +46,8 @@ class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity
                 "now": now.get("title"), "now_start": now.get("start"), "now_end": now.get("end"),
                 "next": nxt.get("title"), "next_start": nxt.get("start"),
             })
-        return {"playlist": self._playlist_name, "channels": rows}
+        casting = {
+            player: entry for player, entry in self.hass.data.get(DATA_NOW_CASTING, {}).items()
+            if entry.get("stream_id") in channels
+        }
+        return {"playlist": self._playlist_name, "channels": rows, "now_casting": casting}

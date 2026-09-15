@@ -78,12 +78,18 @@ class M3UCasterAPI:
 
     @staticmethod
     def _b64(value: Any) -> str:
-        if not isinstance(value, str) or not value:
+        """Decode base64 EPG text; plain text passes through (a lenient decode turns short plain titles into junk)."""
+        if not isinstance(value, str) or not value.strip():
             return ""
+        raw = value.strip()
         try:
-            return base64.b64decode(value).decode("utf-8", errors="ignore").strip()
-        except Exception:  # noqa: BLE001
-            return value
+            decoded = base64.b64decode(raw, validate=True).decode("utf-8")
+        except ValueError:
+            return raw
+        junk = set("`\\^{}|~<>")
+        if not decoded or not all((ch.isprintable() and ch not in junk) or ch in "\n\r\t" for ch in decoded):
+            return raw
+        return decoded.strip()
 
     @staticmethod
     def _ts(value: Any, fallback: Any) -> datetime | None:

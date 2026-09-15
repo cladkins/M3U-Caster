@@ -9,15 +9,25 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     ATTR_APP_LINK, ATTR_AUTO_CONFIRM, ATTR_CAST_TYPE, ATTR_MEDIA_PLAYER, ATTR_PLAYLIST_UUID, ATTR_STREAM_ID,
-    CAST_TYPES, DOMAIN, SERVICE_PLAY_STREAM, SERVICE_REFRESH, SERVICE_STOP, SERVICE_SYNC_PLAYLIST,
+    CAST_TYPES, DATA_NOW_CASTING, DOMAIN, SERVICE_PLAY_STREAM, SERVICE_REFRESH, SERVICE_STOP, SERVICE_SYNC_PLAYLIST,
 )
-from .player import async_play_url, async_stop
+from .player import ROKU_STREAM_TESTER_APP_NAME, async_play_url, async_stop
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _coordinators(hass: HomeAssistant):
     return list(hass.data.get(DOMAIN, {}).values())
+
+
+def _set_now_casting(hass: HomeAssistant, player: str, entry: dict | None) -> None:
+    casting = hass.data.setdefault(DATA_NOW_CASTING, {})
+    if entry is None:
+        casting.pop(player, None)
+    else:
+        casting[player] = entry
+    for coord in _coordinators(hass):
+        coord.async_update_listeners()
 
 
 def async_setup_services(hass: HomeAssistant) -> None:
@@ -33,12 +43,15 @@ def async_setup_services(hass: HomeAssistant) -> None:
         for coord in _coordinators(hass):
             ch = (coord.data or {}).get("channels", {}).get(sid)
             if ch:
-                await async_play_url(hass, player, ch["url"], ch["name"], cast_type, app_link, auto_confirm)
+                used = await async_play_url(hass, player, ch["url"], ch["name"], cast_type, app_link, auto_confirm)
+                _set_now_casting(hass, player, {"stream_id": sid, "app": ROKU_STREAM_TESTER_APP_NAME if used == "roku" else None})
                 return
         _LOGGER.warning("stream_id %s not found in any playlist", sid)
 
     async def stop(call: ServiceCall) -> None:
-        await async_stop(hass, call.data[ATTR_MEDIA_PLAYER], call.data.get(ATTR_CAST_TYPE, "auto"))
+        player = call.data[ATTR_MEDIA_PLAYER]
+        await async_stop(hass, player, call.data.get(ATTR_CAST_TYPE, "auto"))
+        _set_now_casting(hass, player, None)
 
     async def sync_playlist(call: ServiceCall) -> None:
         for coord in _coordinators(hass):

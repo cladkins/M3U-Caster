@@ -130,11 +130,12 @@ async def async_play_url(
     cast_type: str = "auto",
     app_link: str | None = None,
     auto_confirm: bool = True,
-) -> None:
+) -> str:
+    """Cast and return the cast type actually used once "auto" is resolved."""
     if cast_type == "auto":
         cast_type = detect_cast_type(hass, entity_id)
     if cast_type == "roku" and await _async_roku_ecp_play(hass, entity_id, url, title):
-        return
+        return cast_type
     data: dict[str, Any] = {"entity_id": entity_id, "media_content_id": url}
     if cast_type == "roku":
         data["media_content_type"] = "url"
@@ -162,6 +163,7 @@ async def async_play_url(
             )
         else:
             _LOGGER.debug("no remote entity found for %s; skipping auto confirm", entity_id)
+    return cast_type
 
 
 async def async_stop(hass: HomeAssistant, entity_id: str, cast_type: str = "auto") -> None:

@@ -55,8 +55,13 @@ class M3uCasterTvCard extends HTMLElement {
     const a = tv.attributes || {};
     const cid = a.media_content_id || "";
     const title = a.media_title || "";
-    return channels.find((c) => cid && (cid === c.url || cid.includes(c.url) || cid.includes(`/${c.stream_id}.m3u8`)))
-      || channels.find((c) => title && title === c.name) || null;
+    const matched = channels.find((c) => cid && (cid === c.url || cid.includes(c.url) || cid.includes(`/${c.stream_id}.m3u8`)))
+      || channels.find((c) => title && title === c.name);
+    if (matched) return matched;
+    // Roku exposes no media id/title while Stream Tester plays; fall back to what we last cast there.
+    const cast = ((this._hass.states[this._config.guide] || {}).attributes?.now_casting || {})[this._config.media_player];
+    if (!cast || (cast.app && cast.app !== a.app_name)) return null;
+    return channels.find((c) => c.stream_id === cast.stream_id) || null;
   }
   _render() {
     if (!this._hass || !this._config) return;
@@ -114,9 +119,15 @@ class M3uCasterTvCard extends HTMLElement {
     tvBox.classList.toggle("live", active);
     r.querySelector(".tv .v").textContent = active ? (parts.join("  ·  ") || tvState) : (tvState === "unavailable" ? "Not connected" : "Nothing playing");
     const s = r.querySelector("select");
-    const opts = [`<option value="">Choose a game or channel</option>`]
-      .concat(channels.map((c) => `<option value="${c.stream_id}"${c.stream_id === this._selected ? " selected" : ""}>${c.label}</option>`));
-    if (s.innerHTML !== opts.join("")) s.innerHTML = opts.join("");
+    const opt = (c) => `<option value="${c.stream_id}"${c.stream_id === this._selected ? " selected" : ""}>${c.label}</option>`;
+    const groups = new Map();
+    channels.forEach((c) => { const g = c.group || ""; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); });
+    const html = [`<option value="">Choose a game or channel</option>`]
+      .concat(groups.size > 1
+        ? [...groups].map(([g, cs]) => `<optgroup label="${(g || "Other").replace(/"/g, "&quot;")}">${cs.map(opt).join("")}</optgroup>`)
+        : channels.map(opt))
+      .join("");
+    if (s.innerHTML !== html) s.innerHTML = html;
     const img = r.querySelector(".now img");
     img.style.display = this._config.show_logo && sel && sel.logo ? "" : "none";
     if (sel && sel.logo) img.src = sel.logo;
