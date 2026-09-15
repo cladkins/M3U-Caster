@@ -9,26 +9,26 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import M3UEditorConfigEntry
+from . import M3UCasterConfigEntry
 from .const import CONF_PLAYLIST_NAME, DOMAIN
-from .coordinator import M3UEditorCoordinator
+from .coordinator import M3UCasterCoordinator
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: M3UEditorConfigEntry, add: AddEntitiesCallback) -> None:
-    add([M3UEditorGuideSensor(entry.runtime_data, entry.entry_id, entry.data.get(CONF_PLAYLIST_NAME) or entry.title)])
+async def async_setup_entry(hass: HomeAssistant, entry: M3UCasterConfigEntry, add: AddEntitiesCallback) -> None:
+    add([M3UCasterGuideSensor(entry.runtime_data, entry.entry_id, entry.data.get(CONF_PLAYLIST_NAME) or entry.title)])
 
 
-class M3UEditorGuideSensor(CoordinatorEntity[M3UEditorCoordinator], SensorEntity):
+class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity):
     _attr_has_entity_name = True
     _attr_name = "Guide"
     _attr_icon = "mdi:television-guide"
     _attr_native_unit_of_measurement = "channels"
 
-    def __init__(self, coordinator: M3UEditorCoordinator, entry_id: str, playlist_name: str) -> None:
+    def __init__(self, coordinator: M3UCasterCoordinator, entry_id: str, playlist_name: str) -> None:
         super().__init__(coordinator)
         self._playlist_name = playlist_name
         self._attr_unique_id = f"{entry_id}_guide"
-        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name=f"M3U Editor {playlist_name}", manufacturer="m3u editor")
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name=f"M3U Caster {playlist_name}", manufacturer="M3U Caster")
 
     @property
     def native_value(self) -> int:

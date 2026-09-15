@@ -1,4 +1,4 @@
-"""Services for M3U Editor."""
+"""Services for M3U Caster."""
 from __future__ import annotations
 
 import logging

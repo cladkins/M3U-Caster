@@ -1,14 +1,14 @@
-# M3U Editor for Home Assistant
+# M3U Caster for Home Assistant
 
-Cast live channels from an Xtream-compatible IPTV server (m3u editor, or any provider with `player_api.php`) to Roku, Apple TV, and Chromecast from a Home Assistant dashboard, with EPG now/next in the picker.
+Cast live channels from any Xtream-compatible IPTV server (any provider exposing a `player_api.php` endpoint) to Roku, Apple TV, and Chromecast from a Home Assistant dashboard, with EPG now/next in the picker.
 
 ## Install
 
 HACS > Integrations > three dots > Custom repositories > add this repo as Integration. Install, restart Home Assistant.
 
-Settings > Devices & Services > Add Integration > M3U Editor. Enter the server URL, username, and password. In m3u editor the password is the playlist UUID. Add the integration once per playlist.
+Settings > Devices & Services > Add Integration > M3U Caster. Enter the server URL, username, and password. On some panels the password field is actually a playlist ID. Add the integration once per playlist.
 
-The dashboard card registers itself. Edit a dashboard > Add card > M3U Editor TV Card.
+The dashboard card registers itself. Edit a dashboard > Add card > M3U Caster TV Card.
 
 ## Card options
 
@@ -24,4 +24,4 @@ Roku uses the built-in Roku Media Player channel.
 
 ## Services
 
-`m3u_editor.play_stream`, `m3u_editor.stop`, `m3u_editor.sync_playlist`, `m3u_editor.refresh`.
+`m3u_caster.play_stream`, `m3u_caster.stop`, `m3u_caster.sync_playlist`, `m3u_caster.refresh`.

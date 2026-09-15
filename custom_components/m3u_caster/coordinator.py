@@ -11,15 +11,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
 
-from .api import M3UEditorAPI, M3UEditorAuthError
+from .api import M3UCasterAPI, M3UCasterAuthError
 from .const import DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 TITLE_MAX = 40
 
 
-class M3UEditorCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    def __init__(self, hass: HomeAssistant, api: M3UEditorAPI, interval: int, epg_limit: int) -> None:
+class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
+    def __init__(self, hass: HomeAssistant, api: M3UCasterAPI, interval: int, epg_limit: int) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(seconds=interval))
         self.api = api
         self.epg_limit = epg_limit
@@ -27,7 +27,7 @@ class M3UEditorCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             streams, categories = await asyncio.gather(self.api.get_live_streams(), self.api.get_live_categories())
-        except M3UEditorAuthError as err:
+        except M3UCasterAuthError as err:
             raise UpdateFailed(f"auth failed: {err}") from err
         except Exception as err:  # noqa: BLE001
             raise UpdateFailed(f"channel fetch failed: {err}") from err

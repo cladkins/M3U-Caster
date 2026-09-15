@@ -10,7 +10,7 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import M3UEditorAPI, M3UEditorAuthError
+from .api import M3UCasterAPI, M3UCasterAuthError
 from .const import (
     CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_PASSWORD, CONF_PLAYLIST, CONF_PLAYLIST_NAME,
     CONF_SCAN_INTERVAL, CONF_USERNAME, DEFAULT_BASE_URL, DEFAULT_EPG_LIMIT,
@@ -42,7 +42,7 @@ def _options_schema(cur: dict[str, Any]) -> vol.Schema:
     })
 
 
-class M3UEditorConfigFlow(ConfigFlow, domain=DOMAIN):
+class M3UCasterConfigFlow(ConfigFlow, domain=DOMAIN):
     VERSION = 1
 
     def __init__(self) -> None:
@@ -61,10 +61,10 @@ class M3UEditorConfigFlow(ConfigFlow, domain=DOMAIN):
                     return result
                 errors["base"] = self._last_error
             elif token:
-                api = M3UEditorAPI(async_get_clientsession(self.hass), user_input[CONF_BASE_URL], user_input[CONF_USERNAME], "", token)
+                api = M3UCasterAPI(async_get_clientsession(self.hass), user_input[CONF_BASE_URL], user_input[CONF_USERNAME], "", token)
                 try:
                     self._playlists = await api.list_playlists()
-                except M3UEditorAuthError:
+                except M3UCasterAuthError:
                     errors["base"] = "invalid_token"
                 except Exception:  # noqa: BLE001
                     _LOGGER.exception("playlist listing failed")
@@ -94,13 +94,13 @@ class M3UEditorConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _try_finish(self, password: str, name: str) -> ConfigFlowResult | None:
         """Validate Xtream creds and create the entry. Returns None on failure and sets _last_error."""
         self._last_error = ""
-        api = M3UEditorAPI(
+        api = M3UCasterAPI(
             async_get_clientsession(self.hass), self._login[CONF_BASE_URL], self._login[CONF_USERNAME],
             password, (self._login.get(CONF_API_TOKEN) or "").strip() or None,
         )
         try:
             await api.get_user_info()
-        except M3UEditorAuthError:
+        except M3UCasterAuthError:
             self._last_error = "invalid_auth"
             return None
         except Exception:  # noqa: BLE001
@@ -122,10 +122,10 @@ class M3UEditorConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        return M3UEditorOptionsFlow()
+        return M3UCasterOptionsFlow()
 
 
-class M3UEditorOptionsFlow(OptionsFlow):
+class M3UCasterOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
             user_input[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])

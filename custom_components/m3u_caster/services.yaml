@@ -75,7 +75,7 @@ stop:
               value: generic
 sync_playlist:
   name: Sync playlist
-  description: Re-sync a playlist in m3u editor. Requires an API token.
+  description: Re-sync a playlist on your IPTV panel. Requires an API token.
   fields:
     playlist_uuid:
       name: Playlist UUID

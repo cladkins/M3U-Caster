@@ -1,7 +1,7 @@
-"""Constants for M3U Editor."""
+"""Constants for M3U Caster."""
 from typing import Final
 
-DOMAIN: Final = "m3u_editor"
+DOMAIN: Final = "m3u_caster"
 
 CONF_BASE_URL: Final = "base_url"
 CONF_USERNAME: Final = "username"

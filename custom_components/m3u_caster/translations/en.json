@@ -3,17 +3,17 @@
     "step": {
       "user": {
         "title": "Connect to your IPTV server",
-        "description": "Enter your Xtream login. In m3u editor the password is the playlist UUID. Leave the password blank and enter an API token to pick a playlist by name instead.",
+        "description": "Enter your Xtream login. On some IPTV panels the password field is actually a playlist ID. Leave the password blank and enter an API token to pick a playlist by name instead.",
         "data": {
           "base_url": "Server URL",
           "username": "Username",
           "password": "Password",
           "playlist_name": "Display name (optional)",
-          "api_token": "m3u editor API token (optional)"
+          "api_token": "IPTV panel API token (optional)"
         },
         "data_description": {
           "base_url": "Example: https://iptv.example.com",
-          "username": "Xtream username. m3u editor installs usually use admin."
+          "username": "Xtream username. Many panels default this to admin."
         }
       },
       "playlist": {

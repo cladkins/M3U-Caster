@@ -1,4 +1,4 @@
-/* m3u-editor-tv-card: pick a TV, a cast type, and a playlist in the card editor. */
+/* m3u-caster-tv-card: pick a TV, a cast type, and a playlist in the card editor. */
 const CAST_TYPES = [
   { value: "auto", label: "Auto detect" },
   { value: "roku", label: "Roku" },
@@ -10,8 +10,8 @@ const CAST_TYPES = [
 const castLabel = (v) => (CAST_TYPES.find((c) => c.value === v) || { label: v }).label;
 const DEFAULT_APP_LINK = "vlc-x-callback://x-callback-url/stream?url={url}";
 
-class M3uEditorTvCard extends HTMLElement {
-  static getConfigElement() { return document.createElement("m3u-editor-tv-card-editor"); }
+class M3uCasterTvCard extends HTMLElement {
+  static getConfigElement() { return document.createElement("m3u-caster-tv-card-editor"); }
   static getStubConfig(hass) {
     const guide = Object.keys(hass.states).find((e) => e.startsWith("sensor.") && hass.states[e].attributes.channels);
     const tv = Object.keys(hass.states).find((e) => e.startsWith("media_player."));
@@ -45,10 +45,10 @@ class M3uEditorTvCard extends HTMLElement {
       data.app_link = this._config.app_link || DEFAULT_APP_LINK;
       data.auto_confirm = this._config.auto_confirm !== false;
     }
-    await this._hass.callService("m3u_editor", "play_stream", data);
+    await this._hass.callService("m3u_caster", "play_stream", data);
   }
   async _stop() {
-    await this._hass.callService("m3u_editor", "stop", { media_player: this._config.media_player, cast_type: this._config.cast_type });
+    await this._hass.callService("m3u_caster", "stop", { media_player: this._config.media_player, cast_type: this._config.cast_type });
   }
   _playingChannel(tv, channels) {
     if (!tv) return null;
@@ -130,7 +130,7 @@ class M3uEditorTvCard extends HTMLElement {
   }
 }
 
-class M3uEditorTvCardEditor extends HTMLElement {
+class M3uCasterTvCardEditor extends HTMLElement {
   setConfig(config) { this._config = { cast_type: "auto", show_logo: true, ...config }; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
   _render() {
@@ -138,7 +138,7 @@ class M3uEditorTvCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (s) => ({
-        media_player: "TV / media player", cast_type: "Cast type", guide: "M3U Editor playlist (guide sensor)",
+        media_player: "TV / media player", cast_type: "Cast type", guide: "M3U Caster playlist (guide sensor)",
         title: "Card title (optional)", show_logo: "Show channel logo",
         app_link: "App link template (apple_tv_app only, {url} = stream)", auto_confirm: "Auto press Select on the Open prompt",
       }[s.name] || s.name);
@@ -163,7 +163,7 @@ class M3uEditorTvCardEditor extends HTMLElement {
   }
 }
 
-customElements.define("m3u-editor-tv-card", M3uEditorTvCard);
-customElements.define("m3u-editor-tv-card-editor", M3uEditorTvCardEditor);
+customElements.define("m3u-caster-tv-card", M3uCasterTvCard);
+customElements.define("m3u-caster-tv-card-editor", M3uCasterTvCardEditor);
 window.customCards = window.customCards || [];
-window.customCards.push({ type: "m3u-editor-tv-card", name: "M3U Editor TV Card", description: "Pick a game from the EPG and cast to a TV", preview: true });
+window.customCards.push({ type: "m3u-caster-tv-card", name: "M3U Caster TV Card", description: "Pick a game from the EPG and cast to a TV", preview: true });

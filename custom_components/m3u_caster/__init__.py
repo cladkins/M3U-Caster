@@ -1,4 +1,4 @@
-"""M3U Editor integration."""
+"""M3U Caster integration."""
 from __future__ import annotations
 
 import logging
@@ -11,19 +11,19 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.loader import async_get_integration
 
-from .api import M3UEditorAPI
+from .api import M3UCasterAPI
 from .const import (
     CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_PASSWORD, CONF_SCAN_INTERVAL,
     CONF_USERNAME, DEFAULT_EPG_LIMIT, DEFAULT_SCAN_INTERVAL, DOMAIN,
 )
-from .coordinator import M3UEditorCoordinator
+from .coordinator import M3UCasterCoordinator
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
 PLATFORMS: list[Platform] = [Platform.SENSOR]
-FRONTEND_URL = f"/{DOMAIN}/m3u-editor-tv-card.js"
-FRONTEND_FILE = Path(__file__).parent / "frontend" / "m3u-editor-tv-card.js"
-type M3UEditorConfigEntry = ConfigEntry[M3UEditorCoordinator]
+FRONTEND_URL = f"/{DOMAIN}/m3u-caster-tv-card.js"
+FRONTEND_FILE = Path(__file__).parent / "frontend" / "m3u-caster-tv-card.js"
+type M3UCasterConfigEntry = ConfigEntry[M3UCasterCoordinator]
 
 
 async def _async_register_frontend(hass: HomeAssistant) -> None:
@@ -55,16 +55,16 @@ async def _async_register_frontend(hass: HomeAssistant) -> None:
     await resources.async_create_item({"res_type": "module", "url": url})
 
 
-async def async_setup_entry(hass: HomeAssistant, entry: M3UEditorConfigEntry) -> bool:
+async def async_setup_entry(hass: HomeAssistant, entry: M3UCasterConfigEntry) -> bool:
     await _async_register_frontend(hass)
-    api = M3UEditorAPI(
+    api = M3UCasterAPI(
         async_get_clientsession(hass),
         entry.data[CONF_BASE_URL],
         entry.data[CONF_USERNAME],
         entry.data[CONF_PASSWORD],
         entry.data.get(CONF_API_TOKEN),
     )
-    coordinator = M3UEditorCoordinator(
+    coordinator = M3UCasterCoordinator(
         hass, api,
         entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         entry.options.get(CONF_EPG_LIMIT, DEFAULT_EPG_LIMIT),
@@ -82,7 +82,7 @@ async def _async_reload(hass: HomeAssistant, entry: ConfigEntry) -> None:
     await hass.config_entries.async_reload(entry.entry_id)
 
 
-async def async_unload_entry(hass: HomeAssistant, entry: M3UEditorConfigEntry) -> bool:
+async def async_unload_entry(hass: HomeAssistant, entry: M3UCasterConfigEntry) -> bool:
     ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if ok:
         hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)

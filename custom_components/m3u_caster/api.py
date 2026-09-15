@@ -1,4 +1,4 @@
-"""Xtream / REST client for M3U Editor."""
+"""Xtream / REST client for M3U Caster."""
 from __future__ import annotations
 
 import base64
@@ -12,11 +12,11 @@ _LOGGER = logging.getLogger(__name__)
 TIMEOUT = aiohttp.ClientTimeout(total=30)
 
 
-class M3UEditorAuthError(Exception):
+class M3UCasterAuthError(Exception):
     """Bad credentials."""
 
 
-class M3UEditorAPI:
+class M3UCasterAPI:
     def __init__(self, session: aiohttp.ClientSession, base_url: str, username: str, password: str, api_token: str | None = None) -> None:
         self._session = session
         self.base_url = base_url.rstrip("/")
@@ -28,7 +28,7 @@ class M3UEditorAPI:
         query = {"username": self.username, "password": self.password, "action": action, **params}
         async with self._session.get(f"{self.base_url}/player_api.php", params=query, timeout=TIMEOUT) as resp:
             if resp.status in (401, 403):
-                raise M3UEditorAuthError("Xtream auth rejected")
+                raise M3UCasterAuthError("Xtream auth rejected")
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
@@ -38,7 +38,7 @@ class M3UEditorAPI:
             headers["Authorization"] = f"Bearer {self.api_token}"
         async with self._session.get(f"{self.base_url}{path}", params=params, headers=headers, timeout=TIMEOUT) as resp:
             if resp.status in (401, 403):
-                raise M3UEditorAuthError("API token rejected")
+                raise M3UCasterAuthError("API token rejected")
             resp.raise_for_status()
             return await resp.json(content_type=None)
 
@@ -52,7 +52,7 @@ class M3UEditorAPI:
         data = await self._xtream("get_user_info")
         info = data.get("user_info", data) if isinstance(data, dict) else {}
         if str(info.get("auth", "0")).lower() not in ("1", "true"):
-            raise M3UEditorAuthError("auth flag not set")
+            raise M3UCasterAuthError("auth flag not set")
         return info
 
     async def get_live_streams(self) -> list[dict[str, Any]]:
