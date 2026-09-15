@@ -8,6 +8,7 @@ from typing import Any
 from urllib.parse import quote
 
 import aiohttp
+from yarl import URL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
@@ -63,9 +64,7 @@ async def _async_roku_app_id(session: aiohttp.ClientSession, host: str, name: st
     Ids aren't fixed across devices, so they have to be discovered per-device
     rather than hardcoded.
     """
-    async with session.get(
-        f"http://{host}:{ROKU_ECP_PORT}/query/apps", headers={"Connection": "close"}
-    ) as resp:
+    async with session.get(f"http://{host}:{ROKU_ECP_PORT}/query/apps") as resp:
         resp.raise_for_status()
         body = await resp.text()
     try:
@@ -90,11 +89,12 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
     live+autoCookie+url+fmt, is what its own plain (non-DRM) stream requests use, and
     that's what actually plays here.
 
-    Even with that byte-identical param set, this still 404'd when issued from HA's
-    shared, keep-alive-pooled aiohttp session - the GET to /query/apps and the POST to
-    /launch both landing on the same reused connection to Roku's minimal embedded HTTP
-    server, unlike the one-off browser POST that worked. Forcing both calls closed
-    avoids that connection reuse.
+    Even with matching param names and values this still 404'd (and with
+    Connection: close, Roku just dropped the connection). The wire-level difference:
+    the browser's encodeURIComponent sends the url value fully percent-encoded
+    (https%3A%2F%2F...), while aiohttp/yarl deliberately leaves ':' and '/' raw in
+    query values. Roku's minimal parser needs the encoded form, so the query string
+    is built by hand and handed to yarl as already-encoded so it isn't rewritten.
     """
     host = _roku_host(hass, entity_id)
     if not host:
@@ -106,16 +106,15 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
         if not app_id:
             _LOGGER.warning("Roku Stream Tester channel not found on %s; falling back to media_player.play_media", host)
             return False
-        params = {
-            "live": "true",
-            "autoCookie": "true",
-            "url": url,
-            "fmt": "Auto",
-        }
-        headers = {"Content-Type": "application/x-www-form-urlencoded", "Connection": "close"}
-        async with session.post(
-            f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params, headers=headers, data=b""
-        ) as resp:
+        query = "&".join((
+            "live=true",
+            "autoCookie=true",
+            f"url={quote(url, safe='')}",
+            "fmt=Auto",
+        ))
+        launch = URL(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}?{query}", encoded=True)
+        headers = {"Content-Type": "application/x-www-form-urlencoded"}
+        async with session.post(launch, headers=headers, data=b"") as resp:
             resp.raise_for_status()
     except aiohttp.ClientError as err:
         _LOGGER.warning("Roku ECP call to %s failed (%s); falling back to media_player.play_media", host, err)
