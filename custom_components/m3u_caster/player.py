@@ -82,8 +82,11 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
     HA's media_player.play_media (via the rokuecp library) throws on this device/firmware
     even though Roku accepts commands fine, and the direct ECP video-launch endpoints
     (/input, /input/<app_id>) both 404 on current firmware. Roku Stream Tester's own
-    /launch/<app_id> deep link (params confirmed from a working third-party app's request
-    capture) is the path that actually works.
+    /launch/<app_id> deep link is the path that works, confirmed via a working
+    third-party app's request capture. Its DRM-capable requests also send drmParams/
+    headers/metadata/cookies, but those made ours 404 - the minimal param set below,
+    live+autoCookie+url+fmt, is what its own plain (non-DRM) stream requests use, and
+    that's what actually plays here.
     """
     host = _roku_host(hass, entity_id)
     if not host:
@@ -96,14 +99,10 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
             _LOGGER.warning("Roku Stream Tester channel not found on %s; falling back to media_player.play_media", host)
             return False
         params = {
+            "live": "true",
+            "autoCookie": "true",
             "url": url,
             "fmt": "Auto",
-            "live": "true",
-            "autoCookie": "false",
-            "drmParams": "{}",
-            "headers": "{}",
-            "metadata": "{}",
-            "cookies": "{}",
         }
         headers = {"Content-Type": "application/x-www-form-urlencoded"}
         async with session.post(f"http://{host}:{ROKU_ECP_PORT}/launch/{app_id}", params=params, headers=headers) as resp:
