@@ -14,16 +14,22 @@ const guideChannels = (hass, guide) => {
   const st = hass.states[guide];
   return st && Array.isArray(st.attributes.channels) ? st.attributes.channels : [];
 };
-// Options grouped by category when the playlist has more than one, flat otherwise.
-const pickerHtml = (channels, selected, placeholder) => {
-  const opt = (c) => `<option value="${c.stream_id}"${c.stream_id === selected ? " selected" : ""}>${c.label}</option>`;
-  const groups = new Map();
-  channels.forEach((c) => { const g = c.group || ""; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); });
-  return [`<option value="">${placeholder}</option>`]
-    .concat(groups.size > 1
-      ? [...groups].map(([g, cs]) => `<optgroup label="${esc(g || "Other")}">${cs.map(opt).join("")}</optgroup>`)
-      : channels.map(opt))
-    .join("");
+// Rebuild a <select> only when the channel list itself changes: rewriting it on every state update closes an
+// open menu and drops the pick. Selection is applied through .value, never baked into the HTML.
+const syncPicker = (select, channels, selected, placeholder) => {
+  const sig = placeholder + "\n" + channels.map((c) => `${c.stream_id}\t${c.group || ""}\t${c.label}`).join("\n");
+  if (select.dataset.sig !== sig) {
+    const opt = (c) => `<option value="${c.stream_id}">${c.label}</option>`;
+    const groups = new Map();
+    channels.forEach((c) => { const g = c.group || ""; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); });
+    select.innerHTML = [`<option value="">${placeholder}</option>`]
+      .concat(groups.size > 1
+        ? [...groups].map(([g, cs]) => `<optgroup label="${esc(g || "Other")}">${cs.map(opt).join("")}</optgroup>`)
+        : channels.map(opt))
+      .join("");
+    select.dataset.sig = sig;
+  }
+  if (select.value !== (selected || "")) select.value = selected || "";
 };
 
 class M3uCasterTvCard extends HTMLElement {
@@ -134,9 +140,7 @@ class M3uCasterTvCard extends HTMLElement {
     const parts = [a.app_name, onTv ? onTv.name : a.media_title, a.media_artist].filter(Boolean);
     tvBox.classList.toggle("live", active);
     r.querySelector(".tv .v").textContent = active ? (parts.join("  ·  ") || tvState) : (tvState === "unavailable" ? "Not connected" : "Nothing playing");
-    const s = r.querySelector("select");
-    const html = pickerHtml(channels, this._selected, "Choose a game or channel");
-    if (s.innerHTML !== html) s.innerHTML = html;
+    syncPicker(r.querySelector("select"), channels, this._selected, "Choose a game or channel");
     const img = r.querySelector(".now img");
     img.style.display = this._config.show_logo && sel && sel.logo ? "" : "none";
     if (sel && sel.logo) img.src = sel.logo;
@@ -199,8 +203,9 @@ class M3uCasterQuadCard extends HTMLElement {
   set hass(hass) { this._hass = hass; this._render(); }
   getCardSize() { return 5; }
   async _cast() {
-    const ids = this._sel.filter(Boolean);
-    if (!ids.length) return;
+    if (!this._sel.some(Boolean)) return;
+    // Positional: an empty entry keeps that quadrant's slot index, so slot 3 stays slot 3.
+    const ids = this._sel.map((v) => v || "");
     await this._hass.callService("m3u_caster", "play_multiview", { stream_ids: ids, media_player: this._config.media_player });
   }
   async _stop() {
@@ -222,9 +227,9 @@ class M3uCasterQuadCard extends HTMLElement {
           .hdr .name { font-size:1.1em; font-weight:500; }
           .hdr .state { font-size:.85em; opacity:.7; text-transform:capitalize; }
           .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
-          .slot { display:flex; flex-direction:column; gap:4px; }
+          .slot { display:flex; flex-direction:column; gap:4px; min-width:0; }
           .slot .l { font-size:.7em; opacity:.6; text-transform:uppercase; letter-spacing:.04em; }
-          select { width:100%; padding:8px; border-radius:6px; border:1px solid var(--divider-color);
+          select { width:100%; min-width:0; max-width:100%; padding:8px; border-radius:6px; border:1px solid var(--divider-color);
                    background:var(--card-background-color); color:var(--primary-text-color); font-size:.9em; }
           .btns { display:flex; gap:8px; }
           button { flex:1; padding:10px; border:0; border-radius:8px; font-size:.95em; cursor:pointer;
@@ -250,10 +255,7 @@ class M3uCasterQuadCard extends HTMLElement {
     const r = this._root;
     r.querySelector(".name").textContent = tvName;
     r.querySelector(".state").textContent = tvState;
-    r.querySelectorAll("select").forEach((s, i) => {
-      const html = pickerHtml(channels, this._sel[i], `Stream ${i + 1}: none`);
-      if (s.innerHTML !== html) s.innerHTML = html;
-    });
+    r.querySelectorAll("select").forEach((s, i) => syncPicker(s, channels, this._sel[i], `Stream ${i + 1}: none`));
     r.querySelector("button.play").disabled = !this._sel.some(Boolean) || tvState === "unavailable";
     r.querySelector("button.stop").disabled = tvState === "unavailable";
     r.querySelector(".pl").textContent = playlist ? `Playlist: ${playlist}  ·  QuadStream` : "";

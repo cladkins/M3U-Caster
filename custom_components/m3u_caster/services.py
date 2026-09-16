@@ -62,14 +62,18 @@ def async_setup_services(hass: HomeAssistant) -> None:
     async def play_multiview(call: ServiceCall) -> None:
         urls: list[str] = []
         for sid in call.data[ATTR_STREAM_IDS]:
-            for coord in _coordinators(hass):
-                ch = (coord.data or {}).get("channels", {}).get(str(sid))
-                if ch:
-                    urls.append(ch["url"])
-                    break
-            else:
-                _LOGGER.warning("stream_id %s not found in any playlist", sid)
-        if not urls:
+            sid = str(sid).strip()
+            url = ""
+            if sid:
+                for coord in _coordinators(hass):
+                    ch = (coord.data or {}).get("channels", {}).get(sid)
+                    if ch:
+                        url = ch["url"]
+                        break
+                else:
+                    _LOGGER.warning("stream_id %s not found in any playlist", sid)
+            urls.append(url)
+        if not any(urls):
             raise HomeAssistantError("none of the requested stream ids are in a loaded playlist")
         creds = next(
             ((e.options[CONF_QUADSTREAM_USERNAME], e.options.get(CONF_QUADSTREAM_SECRET, ""))

@@ -93,7 +93,7 @@ play_multiview:
   fields:
     stream_ids:
       name: Stream IDs
-      description: One to four stream IDs, in quadrant order.
+      description: One to four stream IDs, in quadrant order. An empty entry skips that slot.
       required: true
       selector:
         text:
