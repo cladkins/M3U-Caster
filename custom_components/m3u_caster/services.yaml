@@ -47,7 +47,7 @@ play_stream:
         boolean:
 stop:
   name: Stop
-  description: Stop playback. Sends Home on Apple TV app and Roku targets, media_stop elsewhere.
+  description: Stop playback. Presses Select then Home on Apple TV app targets, Home on Roku, media_stop elsewhere.
   fields:
     media_player:
       name: Media player

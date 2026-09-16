@@ -172,6 +172,12 @@ async def async_stop(hass: HomeAssistant, entity_id: str, cast_type: str = "auto
     if cast_type in ("apple_tv_app", "roku"):
         remote = _remote_for(hass, entity_id)
         if remote:
-            await hass.services.async_call("remote", "send_command", {"entity_id": remote, "command": "home"}, blocking=False)
+            # Home alone leaves VLC streaming in the background on tvOS; Select first halts playback.
+            commands = ["select", "home"] if cast_type == "apple_tv_app" else ["home"]
+            await hass.services.async_call(
+                "remote", "send_command",
+                {"entity_id": remote, "command": commands, "delay_secs": 0.6},
+                blocking=False,
+            )
             return
     await hass.services.async_call("media_player", "media_stop", {"entity_id": entity_id}, blocking=False)
