@@ -236,11 +236,12 @@ class M3uCasterQuadCard extends HTMLElement {
     if (!config.guide) throw new Error("guide sensor is required");
     this._config = { ...config };
     this._sel = this._sel || ["", "", "", ""];
-    this._group = this._group || "";
+    // One group pick per slot: a multiview is usually four games from four different groups.
+    this._grp = this._grp || ["", "", "", ""];
   }
   set hass(hass) { this._hass = hass; this._render(); }
   getCardSize() { return 5; }
-  _visible() { return filterChannels(guideChannels(this._hass, this._config.guide), this._config.groups, this._group); }
+  _visible(i) { return filterChannels(guideChannels(this._hass, this._config.guide), this._config.groups, this._grp[i]); }
   async _cast() {
     if (!this._sel.some(Boolean)) return;
     // Positional: an empty entry keeps that quadrant's slot index, so slot 3 stays slot 3.
@@ -256,7 +257,6 @@ class M3uCasterQuadCard extends HTMLElement {
     const tvName = this._config.title || (tv ? tv.attributes.friendly_name : this._config.media_player);
     const tvState = tv ? tv.state : "unavailable";
     const groups = channelGroups(filterChannels(guideChannels(this._hass, this._config.guide), this._config.groups));
-    const channels = this._visible();
     const playlist = (this._hass.states[this._config.guide] || {}).attributes?.playlist || "";
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
@@ -271,7 +271,7 @@ class M3uCasterQuadCard extends HTMLElement {
           .slot .l { font-size:.7em; opacity:.6; text-transform:uppercase; letter-spacing:.04em; }
           select { width:100%; min-width:0; max-width:100%; padding:8px; border-radius:6px; border:1px solid var(--divider-color);
                    background:var(--card-background-color); color:var(--primary-text-color); font-size:.9em; }
-          select.grp { margin-bottom:8px; font-size:.85em; }
+          select.grp { font-size:.8em; padding:6px 8px; opacity:.85; }
           .btns { display:flex; gap:8px; }
           button { flex:1; padding:10px; border:0; border-radius:8px; font-size:.95em; cursor:pointer;
                    background:var(--primary-color); color:var(--text-primary-color); }
@@ -281,19 +281,19 @@ class M3uCasterQuadCard extends HTMLElement {
         </style>
         <ha-card>
           <div class="hdr"><span class="name"></span><span class="state"></span></div>
-          <select class="grp"></select>
           <div class="grid">
-            ${[1, 2, 3, 4].map((n) => `<div class="slot"><span class="l">Stream ${n}</span><select data-slot="${n - 1}"></select></div>`).join("")}
+            ${[1, 2, 3, 4].map((n) => `<div class="slot"><span class="l">Stream ${n}</span>
+              <select class="grp" data-grp="${n - 1}"></select><select data-slot="${n - 1}"></select></div>`).join("")}
           </div>
           <div class="btns"><button class="play">Cast to QuadStream</button><button class="stop">Stop</button></div>
           <div class="pl"></div>
         </ha-card>`;
-      this._root.querySelector("select.grp").addEventListener("change", (e) => {
-        this._group = e.target.value;
-        const ids = new Set(this._visible().map((c) => c.stream_id));
-        this._sel = this._sel.map((v) => (ids.has(v) ? v : ""));
+      this._root.querySelectorAll("select[data-grp]").forEach((s) => s.addEventListener("change", (e) => {
+        const i = Number(e.target.dataset.grp);
+        this._grp[i] = e.target.value;
+        if (!this._visible(i).some((c) => c.stream_id === this._sel[i])) this._sel[i] = "";
         this._render();
-      });
+      }));
       this._root.querySelectorAll("select[data-slot]").forEach((s) => s.addEventListener("change", (e) => {
         this._sel[Number(e.target.dataset.slot)] = e.target.value; this._render();
       }));
@@ -303,8 +303,8 @@ class M3uCasterQuadCard extends HTMLElement {
     const r = this._root;
     r.querySelector(".name").textContent = tvName;
     r.querySelector(".state").textContent = tvState;
-    syncGroupPicker(r.querySelector("select.grp"), groups, this._group);
-    r.querySelectorAll("select[data-slot]").forEach((s, i) => syncPicker(s, channels, this._sel[i], `Stream ${i + 1}: none`));
+    r.querySelectorAll("select[data-grp]").forEach((s, i) => syncGroupPicker(s, groups, this._grp[i]));
+    r.querySelectorAll("select[data-slot]").forEach((s, i) => syncPicker(s, this._visible(i), this._sel[i], `Stream ${i + 1}: none`));
     r.querySelector("button.play").disabled = !this._sel.some(Boolean) || tvState === "unavailable";
     r.querySelector("button.stop").disabled = tvState === "unavailable";
     r.querySelector(".pl").textContent = playlist ? `Playlist: ${playlist}  ·  QuadStream` : "";
