@@ -18,9 +18,10 @@ TV: any media_player entity.
 Cast type: Auto detect, Roku, Apple TV (AirPlay), Apple TV app (VLC), Chromecast, Generic. Auto detect picks Roku for Roku players, the app path for Apple TVs, Chromecast for cast players, and Generic otherwise.
 App link template: for Apple TV app. `{url}` is replaced with the stream URL. Default launches VLC.
 Auto confirm: presses Select on the tvOS "Open in app?" prompt.
+Channel groups: limit the card to these playlist groups. Empty means all.
 Card title and channel logo toggle.
 
-The picker lists each channel with its current programme and start time, and groups channels by category when a playlist has more than one. The On TV strip shows what the player is doing. On Roku it names the channel the integration last cast there, since the Roku integration exposes no title while Stream Tester plays.
+The picker lists each channel with its current programme and start time, and groups channels by category when a playlist has more than one. When more than one group is available, a group dropdown sits above the picker to narrow the list on the fly; a pick outside the chosen group clears. The QuadStream card has the same option and dropdown, and its four pickers follow it together. The On TV strip shows what the player is doing. On Roku it names the channel the integration last cast there, since the Roku integration exposes no title while Stream Tester plays.
 
 ## Device notes
 

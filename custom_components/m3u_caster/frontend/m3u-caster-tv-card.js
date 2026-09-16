@@ -14,6 +14,31 @@ const guideChannels = (hass, guide) => {
   const st = hass.states[guide];
   return st && Array.isArray(st.attributes.channels) ? st.attributes.channels : [];
 };
+// Channels with no group are shown as "Other"; they need a non-empty key so "" can mean "all groups".
+const OTHER = "__other__";
+const gkey = (g) => g || OTHER;
+const gname = (g) => (g && g !== OTHER ? g : "Other");
+const channelGroups = (channels) => [...new Set(channels.map((c) => gkey(c.group)))];
+// `allowed` is the card's configured group list (empty = all); `current` is the in-card dropdown pick.
+const filterChannels = (channels, allowed, current) => channels.filter((c) => {
+  const g = gkey(c.group);
+  return (!allowed || !allowed.length || allowed.includes(g)) && (!current || g === current);
+});
+const syncGroupPicker = (select, groups, current) => {
+  const sig = groups.join("\n");
+  if (select.dataset.sig !== sig) {
+    select.innerHTML = [`<option value="">All groups</option>`]
+      .concat(groups.map((g) => `<option value="${esc(g)}">${gname(g)}</option>`)).join("");
+    select.dataset.sig = sig;
+  }
+  select.style.display = groups.length > 1 ? "" : "none";
+  if (select.value !== (current || "")) select.value = current || "";
+};
+const groupSchema = (hass, guide) => ({
+  name: "groups",
+  selector: { select: { multiple: true, mode: "dropdown",
+    options: channelGroups(guideChannels(hass, guide)).map((g) => ({ value: g, label: gname(g) })) } },
+});
 // Rebuild a <select> only when the channel list itself changes: rewriting it on every state update closes an
 // open menu and drops the pick. Selection is applied through .value, never baked into the HTML.
 const syncPicker = (select, channels, selected, placeholder) => {
@@ -44,6 +69,7 @@ class M3uCasterTvCard extends HTMLElement {
     if (!config.guide) throw new Error("guide sensor is required");
     this._config = { cast_type: "auto", show_logo: true, app_link: DEFAULT_APP_LINK, auto_confirm: true, ...config };
     this._selected = this._selected || "";
+    this._group = this._group || "";
   }
   set hass(hass) {
     this._hass = hass;
@@ -56,10 +82,8 @@ class M3uCasterTvCard extends HTMLElement {
     const d = new Date(iso);
     return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   }
-  _channels() {
-    const st = this._hass.states[this._config.guide];
-    return st && Array.isArray(st.attributes.channels) ? st.attributes.channels : [];
-  }
+  _channels() { return guideChannels(this._hass, this._config.guide); }
+  _visible() { return filterChannels(this._channels(), this._config.groups, this._group); }
   async _play() {
     if (!this._selected) return;
     const data = { stream_id: this._selected, media_player: this._config.media_player, cast_type: this._config.cast_type };
@@ -89,13 +113,15 @@ class M3uCasterTvCard extends HTMLElement {
     if (!this._hass || !this._config) return;
     const tv = this._hass.states[this._config.media_player];
     const tvName = this._config.title || (tv ? tv.attributes.friendly_name : this._config.media_player);
-    const channels = this._channels();
+    const all = this._channels();
+    const groups = channelGroups(filterChannels(all, this._config.groups));
+    const channels = this._visible();
     const playlist = (this._hass.states[this._config.guide] || {}).attributes?.playlist || "";
     const tvState = tv ? tv.state : "unavailable";
     const active = ["playing", "paused", "buffering"].includes(tvState);
-    const onTv = active ? this._playingChannel(tv, channels) : null;
-    if (onTv && !this._selected) this._selected = onTv.stream_id;
-    const sel = channels.find((c) => c.stream_id === this._selected) || null;
+    const onTv = active ? this._playingChannel(tv, all) : null;
+    if (onTv && !this._selected && channels.includes(onTv)) this._selected = onTv.stream_id;
+    const sel = all.find((c) => c.stream_id === this._selected) || null;
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
       this._root.innerHTML = `
@@ -109,6 +135,7 @@ class M3uCasterTvCard extends HTMLElement {
           .tv .l { font-size:.75em; opacity:.6; text-transform:uppercase; letter-spacing:.04em; }
           select { width:100%; padding:8px; border-radius:6px; border:1px solid var(--divider-color);
                    background:var(--card-background-color); color:var(--primary-text-color); font-size:.95em; }
+          select.grp { margin-bottom:8px; font-size:.85em; }
           .now { display:flex; gap:12px; margin:10px 0; min-height:48px; align-items:center; }
           .now img { width:48px; height:48px; object-fit:contain; border-radius:6px; background:var(--secondary-background-color); }
           .now .t { font-weight:500; }
@@ -123,12 +150,18 @@ class M3uCasterTvCard extends HTMLElement {
         <ha-card>
           <div class="hdr"><span class="name"></span><span class="state"></span></div>
           <div class="tv"><div class="l">On TV</div><div class="v"></div></div>
-          <select></select>
+          <select class="grp"></select>
+          <select class="ch"></select>
           <div class="now"><img/><div><div class="t"></div><div class="s"></div></div></div>
           <div class="btns"><button class="play">Cast</button><button class="stop">Stop</button></div>
           <div class="pl"></div>
         </ha-card>`;
-      this._root.querySelector("select").addEventListener("change", (e) => { this._selected = e.target.value; this._render(); });
+      this._root.querySelector("select.grp").addEventListener("change", (e) => {
+        this._group = e.target.value;
+        if (!this._visible().some((c) => c.stream_id === this._selected)) this._selected = "";
+        this._render();
+      });
+      this._root.querySelector("select.ch").addEventListener("change", (e) => { this._selected = e.target.value; this._render(); });
       this._root.querySelector("button.play").addEventListener("click", () => this._play());
       this._root.querySelector("button.stop").addEventListener("click", () => this._stop());
     }
@@ -140,7 +173,8 @@ class M3uCasterTvCard extends HTMLElement {
     const parts = [a.app_name, onTv ? onTv.name : a.media_title, a.media_artist].filter(Boolean);
     tvBox.classList.toggle("live", active);
     r.querySelector(".tv .v").textContent = active ? (parts.join("  ·  ") || tvState) : (tvState === "unavailable" ? "Not connected" : "Nothing playing");
-    syncPicker(r.querySelector("select"), channels, this._selected, "Choose a game or channel");
+    syncGroupPicker(r.querySelector("select.grp"), groups, this._group);
+    syncPicker(r.querySelector("select.ch"), channels, this._selected, "Choose a game or channel");
     const img = r.querySelector(".now img");
     img.style.display = this._config.show_logo && sel && sel.logo ? "" : "none";
     if (sel && sel.logo) img.src = sel.logo;
@@ -163,7 +197,7 @@ class M3uCasterTvCardEditor extends HTMLElement {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (s) => ({
         media_player: "TV / media player", cast_type: "Cast type", guide: "M3U Caster playlist (guide sensor)",
-        title: "Card title (optional)", show_logo: "Show channel logo",
+        groups: "Channel groups (empty = all)", title: "Card title (optional)", show_logo: "Show channel logo",
         app_link: "App link template (apple_tv_app only, {url} = stream)", auto_confirm: "Auto press Select on the Open prompt",
       }[s.name] || s.name);
       this._form.addEventListener("value-changed", (e) => {
@@ -181,6 +215,7 @@ class M3uCasterTvCardEditor extends HTMLElement {
       { name: "app_link", selector: { text: {} } },
       { name: "auto_confirm", selector: { boolean: {} } },
       { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
+      groupSchema(this._hass, this._config.guide),
       { name: "title", selector: { text: {} } },
       { name: "show_logo", selector: { boolean: {} } },
     ];
@@ -199,9 +234,11 @@ class M3uCasterQuadCard extends HTMLElement {
     if (!config.guide) throw new Error("guide sensor is required");
     this._config = { ...config };
     this._sel = this._sel || ["", "", "", ""];
+    this._group = this._group || "";
   }
   set hass(hass) { this._hass = hass; this._render(); }
   getCardSize() { return 5; }
+  _visible() { return filterChannels(guideChannels(this._hass, this._config.guide), this._config.groups, this._group); }
   async _cast() {
     if (!this._sel.some(Boolean)) return;
     // Positional: an empty entry keeps that quadrant's slot index, so slot 3 stays slot 3.
@@ -216,7 +253,8 @@ class M3uCasterQuadCard extends HTMLElement {
     const tv = this._hass.states[this._config.media_player];
     const tvName = this._config.title || (tv ? tv.attributes.friendly_name : this._config.media_player);
     const tvState = tv ? tv.state : "unavailable";
-    const channels = guideChannels(this._hass, this._config.guide);
+    const groups = channelGroups(filterChannels(guideChannels(this._hass, this._config.guide), this._config.groups));
+    const channels = this._visible();
     const playlist = (this._hass.states[this._config.guide] || {}).attributes?.playlist || "";
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
@@ -231,6 +269,7 @@ class M3uCasterQuadCard extends HTMLElement {
           .slot .l { font-size:.7em; opacity:.6; text-transform:uppercase; letter-spacing:.04em; }
           select { width:100%; min-width:0; max-width:100%; padding:8px; border-radius:6px; border:1px solid var(--divider-color);
                    background:var(--card-background-color); color:var(--primary-text-color); font-size:.9em; }
+          select.grp { margin-bottom:8px; font-size:.85em; }
           .btns { display:flex; gap:8px; }
           button { flex:1; padding:10px; border:0; border-radius:8px; font-size:.95em; cursor:pointer;
                    background:var(--primary-color); color:var(--text-primary-color); }
@@ -240,13 +279,20 @@ class M3uCasterQuadCard extends HTMLElement {
         </style>
         <ha-card>
           <div class="hdr"><span class="name"></span><span class="state"></span></div>
+          <select class="grp"></select>
           <div class="grid">
             ${[1, 2, 3, 4].map((n) => `<div class="slot"><span class="l">Stream ${n}</span><select data-slot="${n - 1}"></select></div>`).join("")}
           </div>
           <div class="btns"><button class="play">Cast to QuadStream</button><button class="stop">Stop</button></div>
           <div class="pl"></div>
         </ha-card>`;
-      this._root.querySelectorAll("select").forEach((s) => s.addEventListener("change", (e) => {
+      this._root.querySelector("select.grp").addEventListener("change", (e) => {
+        this._group = e.target.value;
+        const ids = new Set(this._visible().map((c) => c.stream_id));
+        this._sel = this._sel.map((v) => (ids.has(v) ? v : ""));
+        this._render();
+      });
+      this._root.querySelectorAll("select[data-slot]").forEach((s) => s.addEventListener("change", (e) => {
         this._sel[Number(e.target.dataset.slot)] = e.target.value; this._render();
       }));
       this._root.querySelector("button.play").addEventListener("click", () => this._cast());
@@ -255,7 +301,8 @@ class M3uCasterQuadCard extends HTMLElement {
     const r = this._root;
     r.querySelector(".name").textContent = tvName;
     r.querySelector(".state").textContent = tvState;
-    r.querySelectorAll("select").forEach((s, i) => syncPicker(s, channels, this._sel[i], `Stream ${i + 1}: none`));
+    syncGroupPicker(r.querySelector("select.grp"), groups, this._group);
+    r.querySelectorAll("select[data-slot]").forEach((s, i) => syncPicker(s, channels, this._sel[i], `Stream ${i + 1}: none`));
     r.querySelector("button.play").disabled = !this._sel.some(Boolean) || tvState === "unavailable";
     r.querySelector("button.stop").disabled = tvState === "unavailable";
     r.querySelector(".pl").textContent = playlist ? `Playlist: ${playlist}  ·  QuadStream` : "";
@@ -270,7 +317,8 @@ class M3uCasterQuadCardEditor extends HTMLElement {
     if (!this._form) {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (s) => ({
-        media_player: "Apple TV (media player)", guide: "M3U Caster playlist (guide sensor)", title: "Card title (optional)",
+        media_player: "Apple TV (media player)", guide: "M3U Caster playlist (guide sensor)",
+        groups: "Channel groups (empty = all)", title: "Card title (optional)",
       }[s.name] || s.name);
       this._form.addEventListener("value-changed", (e) => {
         this._config = e.detail.value;
@@ -284,6 +332,7 @@ class M3uCasterQuadCardEditor extends HTMLElement {
     this._form.schema = [
       { name: "media_player", required: true, selector: { entity: { domain: "media_player" } } },
       { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
+      groupSchema(this._hass, this._config.guide),
       { name: "title", selector: { text: {} } },
     ];
   }
