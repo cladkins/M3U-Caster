@@ -41,7 +41,8 @@ Two things to know. QuadStream's own dashboard states that private sets are read
 ## Services
 
 `m3u_caster.play_stream`: `stream_id`, `media_player`, optional `cast_type`, `app_link`, `auto_confirm`.
-`m3u_caster.stop`: `media_player`, optional `cast_type`.
+`m3u_caster.play_multiview`: `stream_ids` (one to four, in quadrant order, empty entries skip a slot), optional `media_player` to relaunch QuadStream on.
+`m3u_caster.stop`: `media_player`, optional `cast_type`. `cast_type: home` presses Home only, which is what the QuadStream card uses.
 `m3u_caster.sync_playlist`: re-sync a playlist on the panel, optional `playlist_uuid`. Requires an API token.
 `m3u_caster.refresh`: re-poll channels and EPG now.
 
