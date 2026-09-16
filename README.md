@@ -32,7 +32,7 @@ Connections: most IPTV accounts allow one stream at a time. Casting to a second 
 
 ## QuadStream multiview (Apple TV)
 
-QuadStream plays four streams in a grid on an Apple TV and reads its sources from a stream set on quadstream.tv. One-time setup: create a private stream set at https://quadstream.tv/stream/ (username and secret), open its instructions, and point the QuadStream app's four sources at the set's four URLs. Then open the integration's options in Home Assistant and enter the QuadStream username and secret.
+QuadStream plays four streams in a grid on an Apple TV and reads its sources from a stream set on quadstream.tv. One-time setup: create a private stream set at https://quadstream.tv/stream/ (username and secret). Its page lists four addresses, https://quadstream.tv/stream/<set id>/1 through /4. In the QuadStream app on the Apple TV, set each quadrant's source to its own address: quadrant 1 to /1, quadrant 2 to /2, and so on. A quadrant pointed anywhere else ignores the set, so only quadrants set this way follow your casts. Then open the integration's options in Home Assistant and enter the QuadStream username and secret.
 
 Add card > M3U Caster QuadStream Card: pick the Apple TV and playlist, choose up to four channels, press Cast to QuadStream. The integration writes the four stream URLs into the set, presses Home, and relaunches QuadStream so it loads the new sources. Stop presses Home. Slots you leave empty are sent blank; in testing the dashboard kept their previous URL, so clear a slot on quadstream.tv if you need it gone. The same action is available as `m3u_caster.play_multiview` with `stream_ids` (one to four) and an optional `media_player`.
 
