@@ -3,15 +3,21 @@ from __future__ import annotations
 
 import logging
 
+import aiohttp
 import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .const import (
     ATTR_APP_LINK, ATTR_AUTO_CONFIRM, ATTR_CAST_TYPE, ATTR_MEDIA_PLAYER, ATTR_PLAYLIST_UUID, ATTR_STREAM_ID,
-    CAST_TYPES, DATA_NOW_CASTING, DOMAIN, SERVICE_PLAY_STREAM, SERVICE_REFRESH, SERVICE_STOP, SERVICE_SYNC_PLAYLIST,
+    ATTR_STREAM_IDS, CAST_TYPES, CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, DATA_NOW_CASTING, DOMAIN,
+    QUADSTREAM_APP_NAME, SERVICE_PLAY_MULTIVIEW, SERVICE_PLAY_STREAM, SERVICE_REFRESH, SERVICE_STOP,
+    SERVICE_SYNC_PLAYLIST,
 )
-from .player import ROKU_STREAM_TESTER_APP_NAME, async_play_url, async_stop
+from .player import ROKU_STREAM_TESTER_APP_NAME, async_launch_app, async_play_url, async_stop
+from .quadstream import QuadStreamError, async_push_streams
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,6 +59,34 @@ def async_setup_services(hass: HomeAssistant) -> None:
         await async_stop(hass, player, call.data.get(ATTR_CAST_TYPE, "auto"))
         _set_now_casting(hass, player, None)
 
+    async def play_multiview(call: ServiceCall) -> None:
+        urls: list[str] = []
+        for sid in call.data[ATTR_STREAM_IDS]:
+            for coord in _coordinators(hass):
+                ch = (coord.data or {}).get("channels", {}).get(str(sid))
+                if ch:
+                    urls.append(ch["url"])
+                    break
+            else:
+                _LOGGER.warning("stream_id %s not found in any playlist", sid)
+        if not urls:
+            raise HomeAssistantError("none of the requested stream ids are in a loaded playlist")
+        creds = next(
+            ((e.options[CONF_QUADSTREAM_USERNAME], e.options.get(CONF_QUADSTREAM_SECRET, ""))
+             for e in hass.config_entries.async_entries(DOMAIN) if e.options.get(CONF_QUADSTREAM_USERNAME)),
+            None,
+        )
+        if creds is None:
+            raise HomeAssistantError("QuadStream is not set up: add the username and secret in the integration options")
+        try:
+            await async_push_streams(async_get_clientsession(hass), creds[0], creds[1], urls)
+        except (QuadStreamError, aiohttp.ClientError) as err:
+            raise HomeAssistantError(f"QuadStream update failed: {err}") from err
+        player = call.data.get(ATTR_MEDIA_PLAYER)
+        if player:
+            await async_launch_app(hass, player, QUADSTREAM_APP_NAME)
+            _set_now_casting(hass, player, None)
+
     async def sync_playlist(call: ServiceCall) -> None:
         for coord in _coordinators(hass):
             await coord.api.sync_playlist(call.data.get(ATTR_PLAYLIST_UUID) or coord.api.password)
@@ -71,6 +105,10 @@ def async_setup_services(hass: HomeAssistant) -> None:
     hass.services.async_register(DOMAIN, SERVICE_STOP, stop, schema=vol.Schema({
         vol.Required(ATTR_MEDIA_PLAYER): cv.entity_id,
         vol.Optional(ATTR_CAST_TYPE, default="auto"): vol.In(CAST_TYPES),
+    }))
+    hass.services.async_register(DOMAIN, SERVICE_PLAY_MULTIVIEW, play_multiview, schema=vol.Schema({
+        vol.Required(ATTR_STREAM_IDS): vol.All(cv.ensure_list, [cv.string], vol.Length(min=1, max=4)),
+        vol.Optional(ATTR_MEDIA_PLAYER): cv.entity_id,
     }))
     hass.services.async_register(DOMAIN, SERVICE_SYNC_PLAYLIST, sync_playlist, schema=vol.Schema({vol.Optional(ATTR_PLAYLIST_UUID): cv.string}))
     hass.services.async_register(DOMAIN, SERVICE_REFRESH, refresh)

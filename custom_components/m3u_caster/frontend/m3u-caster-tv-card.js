@@ -9,6 +9,22 @@ const CAST_TYPES = [
 ];
 const castLabel = (v) => (CAST_TYPES.find((c) => c.value === v) || { label: v }).label;
 const DEFAULT_APP_LINK = "vlc-x-callback://x-callback-url/stream?url={url}";
+const esc = (s) => String(s).replace(/"/g, "&quot;");
+const guideChannels = (hass, guide) => {
+  const st = hass.states[guide];
+  return st && Array.isArray(st.attributes.channels) ? st.attributes.channels : [];
+};
+// Options grouped by category when the playlist has more than one, flat otherwise.
+const pickerHtml = (channels, selected, placeholder) => {
+  const opt = (c) => `<option value="${c.stream_id}"${c.stream_id === selected ? " selected" : ""}>${c.label}</option>`;
+  const groups = new Map();
+  channels.forEach((c) => { const g = c.group || ""; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); });
+  return [`<option value="">${placeholder}</option>`]
+    .concat(groups.size > 1
+      ? [...groups].map(([g, cs]) => `<optgroup label="${esc(g || "Other")}">${cs.map(opt).join("")}</optgroup>`)
+      : channels.map(opt))
+    .join("");
+};
 
 class M3uCasterTvCard extends HTMLElement {
   static getConfigElement() { return document.createElement("m3u-caster-tv-card-editor"); }
@@ -119,14 +135,7 @@ class M3uCasterTvCard extends HTMLElement {
     tvBox.classList.toggle("live", active);
     r.querySelector(".tv .v").textContent = active ? (parts.join("  ·  ") || tvState) : (tvState === "unavailable" ? "Not connected" : "Nothing playing");
     const s = r.querySelector("select");
-    const opt = (c) => `<option value="${c.stream_id}"${c.stream_id === this._selected ? " selected" : ""}>${c.label}</option>`;
-    const groups = new Map();
-    channels.forEach((c) => { const g = c.group || ""; if (!groups.has(g)) groups.set(g, []); groups.get(g).push(c); });
-    const html = [`<option value="">Choose a game or channel</option>`]
-      .concat(groups.size > 1
-        ? [...groups].map(([g, cs]) => `<optgroup label="${(g || "Other").replace(/"/g, "&quot;")}">${cs.map(opt).join("")}</optgroup>`)
-        : channels.map(opt))
-      .join("");
+    const html = pickerHtml(channels, this._selected, "Choose a game or channel");
     if (s.innerHTML !== html) s.innerHTML = html;
     const img = r.querySelector(".now img");
     img.style.display = this._config.show_logo && sel && sel.logo ? "" : "none";
@@ -174,7 +183,114 @@ class M3uCasterTvCardEditor extends HTMLElement {
   }
 }
 
+class M3uCasterQuadCard extends HTMLElement {
+  static getConfigElement() { return document.createElement("m3u-caster-quad-card-editor"); }
+  static getStubConfig(hass) {
+    const guide = Object.keys(hass.states).find((e) => e.startsWith("sensor.") && hass.states[e].attributes.channels);
+    const tv = Object.keys(hass.states).find((e) => e.startsWith("media_player."));
+    return { media_player: tv || "", guide: guide || "" };
+  }
+  setConfig(config) {
+    if (!config.media_player) throw new Error("media_player is required");
+    if (!config.guide) throw new Error("guide sensor is required");
+    this._config = { ...config };
+    this._sel = this._sel || ["", "", "", ""];
+  }
+  set hass(hass) { this._hass = hass; this._render(); }
+  getCardSize() { return 5; }
+  async _cast() {
+    const ids = this._sel.filter(Boolean);
+    if (!ids.length) return;
+    await this._hass.callService("m3u_caster", "play_multiview", { stream_ids: ids, media_player: this._config.media_player });
+  }
+  async _stop() {
+    await this._hass.callService("m3u_caster", "stop", { media_player: this._config.media_player, cast_type: "home" });
+  }
+  _render() {
+    if (!this._hass || !this._config) return;
+    const tv = this._hass.states[this._config.media_player];
+    const tvName = this._config.title || (tv ? tv.attributes.friendly_name : this._config.media_player);
+    const tvState = tv ? tv.state : "unavailable";
+    const channels = guideChannels(this._hass, this._config.guide);
+    const playlist = (this._hass.states[this._config.guide] || {}).attributes?.playlist || "";
+    if (!this._root) {
+      this._root = this.attachShadow({ mode: "open" });
+      this._root.innerHTML = `
+        <style>
+          ha-card { padding: 12px 16px 16px; }
+          .hdr { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+          .hdr .name { font-size:1.1em; font-weight:500; }
+          .hdr .state { font-size:.85em; opacity:.7; text-transform:capitalize; }
+          .grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:10px; }
+          .slot { display:flex; flex-direction:column; gap:4px; }
+          .slot .l { font-size:.7em; opacity:.6; text-transform:uppercase; letter-spacing:.04em; }
+          select { width:100%; padding:8px; border-radius:6px; border:1px solid var(--divider-color);
+                   background:var(--card-background-color); color:var(--primary-text-color); font-size:.9em; }
+          .btns { display:flex; gap:8px; }
+          button { flex:1; padding:10px; border:0; border-radius:8px; font-size:.95em; cursor:pointer;
+                   background:var(--primary-color); color:var(--text-primary-color); }
+          button.stop { background:var(--secondary-background-color); color:var(--primary-text-color); }
+          button:disabled { opacity:.4; cursor:default; }
+          .pl { font-size:.75em; opacity:.6; margin-top:8px; }
+        </style>
+        <ha-card>
+          <div class="hdr"><span class="name"></span><span class="state"></span></div>
+          <div class="grid">
+            ${[1, 2, 3, 4].map((n) => `<div class="slot"><span class="l">Stream ${n}</span><select data-slot="${n - 1}"></select></div>`).join("")}
+          </div>
+          <div class="btns"><button class="play">Cast to QuadStream</button><button class="stop">Stop</button></div>
+          <div class="pl"></div>
+        </ha-card>`;
+      this._root.querySelectorAll("select").forEach((s) => s.addEventListener("change", (e) => {
+        this._sel[Number(e.target.dataset.slot)] = e.target.value; this._render();
+      }));
+      this._root.querySelector("button.play").addEventListener("click", () => this._cast());
+      this._root.querySelector("button.stop").addEventListener("click", () => this._stop());
+    }
+    const r = this._root;
+    r.querySelector(".name").textContent = tvName;
+    r.querySelector(".state").textContent = tvState;
+    r.querySelectorAll("select").forEach((s, i) => {
+      const html = pickerHtml(channels, this._sel[i], `Stream ${i + 1}: none`);
+      if (s.innerHTML !== html) s.innerHTML = html;
+    });
+    r.querySelector("button.play").disabled = !this._sel.some(Boolean) || tvState === "unavailable";
+    r.querySelector("button.stop").disabled = tvState === "unavailable";
+    r.querySelector(".pl").textContent = playlist ? `Playlist: ${playlist}  ·  QuadStream` : "";
+  }
+}
+
+class M3uCasterQuadCardEditor extends HTMLElement {
+  setConfig(config) { this._config = { ...config }; this._render(); }
+  set hass(hass) { this._hass = hass; this._render(); }
+  _render() {
+    if (!this._hass) return;
+    if (!this._form) {
+      this._form = document.createElement("ha-form");
+      this._form.computeLabel = (s) => ({
+        media_player: "Apple TV (media player)", guide: "M3U Caster playlist (guide sensor)", title: "Card title (optional)",
+      }[s.name] || s.name);
+      this._form.addEventListener("value-changed", (e) => {
+        this._config = e.detail.value;
+        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+      });
+      this.appendChild(this._form);
+    }
+    const guides = Object.keys(this._hass.states).filter((e) => e.startsWith("sensor.") && this._hass.states[e].attributes.channels);
+    this._form.hass = this._hass;
+    this._form.data = this._config;
+    this._form.schema = [
+      { name: "media_player", required: true, selector: { entity: { domain: "media_player" } } },
+      { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
+      { name: "title", selector: { text: {} } },
+    ];
+  }
+}
+
 customElements.define("m3u-caster-tv-card", M3uCasterTvCard);
 customElements.define("m3u-caster-tv-card-editor", M3uCasterTvCardEditor);
+customElements.define("m3u-caster-quad-card", M3uCasterQuadCard);
+customElements.define("m3u-caster-quad-card-editor", M3uCasterQuadCardEditor);
 window.customCards = window.customCards || [];
 window.customCards.push({ type: "m3u-caster-tv-card", name: "M3U Caster TV Card", description: "Pick a game from the EPG and cast to a TV", preview: true });
+window.customCards.push({ type: "m3u-caster-quad-card", name: "M3U Caster QuadStream Card", description: "Pick up to four channels and send them to QuadStream on an Apple TV", preview: true });

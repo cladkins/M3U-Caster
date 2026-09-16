@@ -30,6 +30,14 @@ Roku: casting deep-links the stream into the Roku Stream Tester channel over the
 
 Connections: most IPTV accounts allow one stream at a time. Casting to a second TV from the same playlist usually ends the first.
 
+## QuadStream multiview (Apple TV)
+
+QuadStream plays four streams in a grid on an Apple TV and reads its sources from a stream set on quadstream.tv. One-time setup: create a private stream set at https://quadstream.tv/stream/ (username and secret), open its instructions, and point the QuadStream app's four sources at the set's four URLs. Then open the integration's options in Home Assistant and enter the QuadStream username and secret.
+
+Add card > M3U Caster QuadStream Card: pick the Apple TV and playlist, choose up to four channels, press Cast to QuadStream. The integration writes the four stream URLs into the set, presses Home, and relaunches QuadStream so it loads the new sources. Stop presses Home. The same action is available as `m3u_caster.play_multiview` with `stream_ids` (one to four) and an optional `media_player`.
+
+Two things to know. QuadStream's own dashboard states that private sets are readable by anyone who knows the set id and that the secret only restricts editing; the Apple TV fetches the set without logging in, and the stream URLs include the playlist credentials, exactly as they do when you fill in the dashboard by hand. And four streams from one playlist means four sessions on that account, which must allow that many.
+
 ## Services
 
 `m3u_caster.play_stream`: `stream_id`, `media_player`, optional `cast_type`, `app_link`, `auto_confirm`.

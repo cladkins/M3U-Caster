@@ -13,9 +13,10 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from .api import M3UCasterAPI, M3UCasterAuthError
 from .const import (
     CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_PASSWORD, CONF_PLAYLIST, CONF_PLAYLIST_NAME,
-    CONF_SCAN_INTERVAL, CONF_USERNAME, DEFAULT_BASE_URL, DEFAULT_EPG_LIMIT,
-    DEFAULT_SCAN_INTERVAL, DEFAULT_USERNAME, DOMAIN,
+    CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, CONF_SCAN_INTERVAL, CONF_USERNAME, DEFAULT_BASE_URL,
+    DEFAULT_EPG_LIMIT, DEFAULT_SCAN_INTERVAL, DEFAULT_USERNAME, DOMAIN,
 )
+from .quadstream import QuadStreamError, async_login
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,6 +40,9 @@ def _options_schema(cur: dict[str, Any]) -> vol.Schema:
             selector.NumberSelector(selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s")),
         vol.Required(CONF_EPG_LIMIT, default=cur.get(CONF_EPG_LIMIT, DEFAULT_EPG_LIMIT)):
             selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=10, step=1)),
+        vol.Optional(CONF_QUADSTREAM_USERNAME, default=cur.get(CONF_QUADSTREAM_USERNAME, "")): str,
+        vol.Optional(CONF_QUADSTREAM_SECRET, default=cur.get(CONF_QUADSTREAM_SECRET, "")): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
     })
 
 
@@ -127,8 +131,24 @@ class M3UCasterConfigFlow(ConfigFlow, domain=DOMAIN):
 
 class M3UCasterOptionsFlow(OptionsFlow):
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
             user_input[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
             user_input[CONF_EPG_LIMIT] = int(user_input[CONF_EPG_LIMIT])
-            return self.async_create_entry(title="", data=user_input)
-        return self.async_show_form(step_id="init", data_schema=_options_schema(dict(self.config_entry.options)))
+            username = (user_input.get(CONF_QUADSTREAM_USERNAME) or "").strip()
+            secret = (user_input.get(CONF_QUADSTREAM_SECRET) or "").strip()
+            if username:
+                try:
+                    await async_login(async_get_clientsession(self.hass), username, secret)
+                except QuadStreamError:
+                    errors["base"] = "quadstream_auth"
+                except Exception:  # noqa: BLE001
+                    _LOGGER.exception("QuadStream login test failed")
+                    errors["base"] = "cannot_connect"
+            if not errors:
+                user_input[CONF_QUADSTREAM_USERNAME] = username
+                user_input[CONF_QUADSTREAM_SECRET] = secret if username else ""
+                return self.async_create_entry(title="", data=user_input)
+        cur = dict(self.config_entry.options)
+        cur.update(user_input or {})
+        return self.async_show_form(step_id="init", data_schema=_options_schema(cur), errors=errors)

@@ -31,6 +31,21 @@
     "abort": {"already_configured": "This login is already configured"}
   },
   "options": {
-    "step": {"init": {"title": "Polling", "data": {"scan_interval": "Poll interval", "epg_limit": "EPG programmes per channel"}}}
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "QuadStream is optional. Enter the username and secret of a private stream set to enable the multiview card and the play_multiview service.",
+        "data": {
+          "scan_interval": "Poll interval",
+          "epg_limit": "EPG programmes per channel",
+          "quadstream_username": "QuadStream username (optional)",
+          "quadstream_secret": "QuadStream secret"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the server",
+      "quadstream_auth": "QuadStream rejected the username or secret"
+    }
   }
 }

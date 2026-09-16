@@ -73,6 +73,8 @@ stop:
               value: cast
             - label: Generic
               value: generic
+            - label: Home button only
+              value: home
 sync_playlist:
   name: Sync playlist
   description: Re-sync a playlist on your IPTV panel. Requires an API token.
@@ -85,3 +87,21 @@ sync_playlist:
 refresh:
   name: Refresh
   description: Re-poll channels and EPG now.
+play_multiview:
+  name: Play multiview
+  description: Send up to four channels to a QuadStream private stream set, then relaunch QuadStream on an Apple TV. Requires the QuadStream username and secret in the integration options.
+  fields:
+    stream_ids:
+      name: Stream IDs
+      description: One to four stream IDs, in quadrant order.
+      required: true
+      selector:
+        text:
+          multiple: true
+    media_player:
+      name: Apple TV
+      description: Media player to relaunch QuadStream on. Leave empty to only update the stream set.
+      required: false
+      selector:
+        entity:
+          domain: media_player
