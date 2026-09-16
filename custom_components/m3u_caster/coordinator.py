@@ -75,15 +75,17 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
 
         counts = Counter(c["name"] for c in channels.values())
         for c in channels.values():
-            c["label"] = self._label(c, counts[c["name"]] > 1)
+            # "source" is the stable, EPG-free name a media_player source list can carry
+            c["source"] = c["name"] + (f" [{c['stream_id']}]" if counts[c["name"]] > 1 else "")
+            c["label"] = self._label(c)
         return {"channels": channels, "categories": categories}
 
     @staticmethod
     def _fmt(ts: datetime | None) -> str:
         return dt_util.as_local(ts).strftime("%-I:%M %p") if ts else ""
 
-    def _label(self, c: dict[str, Any], duplicate: bool) -> str:
-        name = c["name"] + (f" [{c['stream_id']}]" if duplicate else "")
+    def _label(self, c: dict[str, Any]) -> str:
+        name = c["source"]
         now = c.get("now")
         if not now:
             return name

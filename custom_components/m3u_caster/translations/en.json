@@ -34,12 +34,18 @@
     "step": {
       "init": {
         "title": "Options",
-        "description": "QuadStream is optional. Enter the username and secret of a private stream set to enable the multiview card and the play_multiview service.",
+        "description": "Channel players and QuadStream are optional. A channel player is a media_player whose sources are this playlist's channels, for remote-first cards. QuadStream needs the username and secret of a private stream set.",
         "data": {
           "scan_interval": "Poll interval",
           "epg_limit": "EPG programmes per channel",
+          "remote_players": "TVs to add a channel player for",
+          "remote_groups": "Channel groups on the channel player",
           "quadstream_username": "QuadStream username (optional)",
           "quadstream_secret": "QuadStream secret"
+        },
+        "data_description": {
+          "remote_players": "One media_player entity per TV. Picking a source on it casts that channel to the TV.",
+          "remote_groups": "Leave empty to list every channel."
         }
       }
     },

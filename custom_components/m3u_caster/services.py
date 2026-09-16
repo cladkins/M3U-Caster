@@ -10,30 +10,16 @@ from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
+from .cast import async_cast_channel, async_stop_cast, coordinators, find_channel, set_now_casting
 from .const import (
     ATTR_APP_LINK, ATTR_AUTO_CONFIRM, ATTR_CAST_TYPE, ATTR_MEDIA_PLAYER, ATTR_PLAYLIST_UUID, ATTR_STREAM_ID,
-    ATTR_STREAM_IDS, CAST_TYPES, CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, DATA_NOW_CASTING, DOMAIN,
-    QUADSTREAM_APP_NAME, SERVICE_PLAY_MULTIVIEW, SERVICE_PLAY_STREAM, SERVICE_REFRESH, SERVICE_STOP,
-    SERVICE_SYNC_PLAYLIST,
+    ATTR_STREAM_IDS, CAST_TYPES, CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, DOMAIN, QUADSTREAM_APP_NAME,
+    SERVICE_PLAY_MULTIVIEW, SERVICE_PLAY_STREAM, SERVICE_REFRESH, SERVICE_STOP, SERVICE_SYNC_PLAYLIST,
 )
-from .player import ROKU_STREAM_TESTER_APP_NAME, async_launch_app, async_play_url, async_stop
+from .player import async_launch_app
 from .quadstream import QuadStreamError, async_push_streams
 
 _LOGGER = logging.getLogger(__name__)
-
-
-def _coordinators(hass: HomeAssistant):
-    return list(hass.data.get(DOMAIN, {}).values())
-
-
-def _set_now_casting(hass: HomeAssistant, player: str, entry: dict | None) -> None:
-    casting = hass.data.setdefault(DATA_NOW_CASTING, {})
-    if entry is None:
-        casting.pop(player, None)
-    else:
-        casting[player] = entry
-    for coord in _coordinators(hass):
-        coord.async_update_listeners()
 
 
 def async_setup_services(hass: HomeAssistant) -> None:
@@ -42,37 +28,26 @@ def async_setup_services(hass: HomeAssistant) -> None:
 
     async def play_stream(call: ServiceCall) -> None:
         sid = str(call.data[ATTR_STREAM_ID])
-        player = call.data[ATTR_MEDIA_PLAYER]
-        cast_type = call.data.get(ATTR_CAST_TYPE, "auto")
-        app_link = call.data.get(ATTR_APP_LINK) or None
-        auto_confirm = call.data.get(ATTR_AUTO_CONFIRM, True)
-        for coord in _coordinators(hass):
-            ch = (coord.data or {}).get("channels", {}).get(sid)
-            if ch:
-                used = await async_play_url(hass, player, ch["url"], ch["name"], cast_type, app_link, auto_confirm)
-                _set_now_casting(hass, player, {"stream_id": sid, "app": ROKU_STREAM_TESTER_APP_NAME if used == "roku" else None})
-                return
-        _LOGGER.warning("stream_id %s not found in any playlist", sid)
+        ch = find_channel(hass, sid)
+        if ch is None:
+            _LOGGER.warning("stream_id %s not found in any playlist", sid)
+            return
+        await async_cast_channel(
+            hass, call.data[ATTR_MEDIA_PLAYER], ch, call.data.get(ATTR_CAST_TYPE, "auto"),
+            call.data.get(ATTR_APP_LINK) or None, call.data.get(ATTR_AUTO_CONFIRM, True),
+        )
 
     async def stop(call: ServiceCall) -> None:
-        player = call.data[ATTR_MEDIA_PLAYER]
-        await async_stop(hass, player, call.data.get(ATTR_CAST_TYPE, "auto"))
-        _set_now_casting(hass, player, None)
+        await async_stop_cast(hass, call.data[ATTR_MEDIA_PLAYER], call.data.get(ATTR_CAST_TYPE, "auto"))
 
     async def play_multiview(call: ServiceCall) -> None:
         urls: list[str] = []
         for sid in call.data[ATTR_STREAM_IDS]:
             sid = str(sid).strip()
-            url = ""
-            if sid:
-                for coord in _coordinators(hass):
-                    ch = (coord.data or {}).get("channels", {}).get(sid)
-                    if ch:
-                        url = ch["url"]
-                        break
-                else:
-                    _LOGGER.warning("stream_id %s not found in any playlist", sid)
-            urls.append(url)
+            ch = find_channel(hass, sid) if sid else None
+            if sid and ch is None:
+                _LOGGER.warning("stream_id %s not found in any playlist", sid)
+            urls.append(ch["url"] if ch else "")
         if not any(urls):
             raise HomeAssistantError("none of the requested stream ids are in a loaded playlist")
         creds = next(
@@ -89,14 +64,14 @@ def async_setup_services(hass: HomeAssistant) -> None:
         player = call.data.get(ATTR_MEDIA_PLAYER)
         if player:
             await async_launch_app(hass, player, QUADSTREAM_APP_NAME)
-            _set_now_casting(hass, player, None)
+            set_now_casting(hass, player, None)
 
     async def sync_playlist(call: ServiceCall) -> None:
-        for coord in _coordinators(hass):
+        for coord in coordinators(hass):
             await coord.api.sync_playlist(call.data.get(ATTR_PLAYLIST_UUID) or coord.api.password)
 
     async def refresh(call: ServiceCall) -> None:
-        for coord in _coordinators(hass):
+        for coord in coordinators(hass):
             await coord.async_request_refresh()
 
     hass.services.async_register(DOMAIN, SERVICE_PLAY_STREAM, play_stream, schema=vol.Schema({

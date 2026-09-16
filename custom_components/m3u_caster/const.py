@@ -38,3 +38,7 @@ CONF_QUADSTREAM_USERNAME: Final = "quadstream_username"
 CONF_QUADSTREAM_SECRET: Final = "quadstream_secret"
 QUADSTREAM_APP_NAME: Final = "QuadStream"
 SERVICE_PLAY_MULTIVIEW: Final = "play_multiview"
+
+# media_player platform: one channel player per target TV, for remote-first cards
+CONF_REMOTE_PLAYERS: Final = "remote_players"
+CONF_REMOTE_GROUPS: Final = "remote_groups"

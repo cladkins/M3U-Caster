@@ -7,14 +7,15 @@ from typing import Any
 import voluptuous as vol
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.core import callback
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import M3UCasterAPI, M3UCasterAuthError
 from .const import (
     CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_PASSWORD, CONF_PLAYLIST, CONF_PLAYLIST_NAME,
-    CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, CONF_SCAN_INTERVAL, CONF_USERNAME, DEFAULT_BASE_URL,
-    DEFAULT_EPG_LIMIT, DEFAULT_SCAN_INTERVAL, DEFAULT_USERNAME, DOMAIN,
+    CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, CONF_REMOTE_GROUPS, CONF_REMOTE_PLAYERS, CONF_SCAN_INTERVAL,
+    CONF_USERNAME, DEFAULT_BASE_URL, DEFAULT_EPG_LIMIT, DEFAULT_SCAN_INTERVAL, DEFAULT_USERNAME, DOMAIN,
 )
 from .quadstream import QuadStreamError, async_login
 
@@ -34,12 +35,17 @@ def _login_schema(cur: dict[str, Any] | None = None) -> vol.Schema:
     })
 
 
-def _options_schema(cur: dict[str, Any]) -> vol.Schema:
+def _options_schema(cur: dict[str, Any], groups: list[str], own_players: list[str]) -> vol.Schema:
     return vol.Schema({
         vol.Required(CONF_SCAN_INTERVAL, default=cur.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)):
             selector.NumberSelector(selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s")),
         vol.Required(CONF_EPG_LIMIT, default=cur.get(CONF_EPG_LIMIT, DEFAULT_EPG_LIMIT)):
             selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=10, step=1)),
+        vol.Optional(CONF_REMOTE_PLAYERS, default=cur.get(CONF_REMOTE_PLAYERS, [])): selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="media_player", multiple=True, exclude_entities=own_players)),
+        vol.Optional(CONF_REMOTE_GROUPS, default=cur.get(CONF_REMOTE_GROUPS, [])): selector.SelectSelector(
+            selector.SelectSelectorConfig(options=groups, multiple=True, custom_value=True,
+                                          mode=selector.SelectSelectorMode.DROPDOWN)),
         vol.Optional(CONF_QUADSTREAM_USERNAME, default=cur.get(CONF_QUADSTREAM_USERNAME, "")): str,
         vol.Optional(CONF_QUADSTREAM_SECRET, default=cur.get(CONF_QUADSTREAM_SECRET, "")): selector.TextSelector(
             selector.TextSelectorConfig(type=selector.TextSelectorType.PASSWORD)),
@@ -130,11 +136,29 @@ class M3UCasterConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class M3UCasterOptionsFlow(OptionsFlow):
+    def _channel_groups(self, selected: list[str]) -> list[str]:
+        """Category names from the last poll, plus anything already chosen, for the group picker."""
+        coordinator = getattr(self.config_entry, "runtime_data", None)
+        data = getattr(coordinator, "data", None) or {}
+        names = {str(g) for g in (data.get("categories") or {}).values() if g}
+        names.update(g for g in selected if g)
+        return sorted(names, key=str.casefold)
+
+    def _own_players(self) -> list[str]:
+        """This entry's own media_players, kept out of the target picker so a player cannot target itself."""
+        reg = er.async_get(self.hass)
+        return [
+            e.entity_id for e in er.async_entries_for_config_entry(reg, self.config_entry.entry_id)
+            if e.domain == "media_player"
+        ]
+
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         errors: dict[str, str] = {}
         if user_input is not None:
             user_input[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
             user_input[CONF_EPG_LIMIT] = int(user_input[CONF_EPG_LIMIT])
+            user_input[CONF_REMOTE_PLAYERS] = [p for p in (user_input.get(CONF_REMOTE_PLAYERS) or []) if p]
+            user_input[CONF_REMOTE_GROUPS] = [g.strip() for g in (user_input.get(CONF_REMOTE_GROUPS) or []) if g.strip()]
             username = (user_input.get(CONF_QUADSTREAM_USERNAME) or "").strip()
             secret = (user_input.get(CONF_QUADSTREAM_SECRET) or "").strip()
             if username:
@@ -151,4 +175,5 @@ class M3UCasterOptionsFlow(OptionsFlow):
                 return self.async_create_entry(title="", data=user_input)
         cur = dict(self.config_entry.options)
         cur.update(user_input or {})
-        return self.async_show_form(step_id="init", data_schema=_options_schema(cur), errors=errors)
+        schema = _options_schema(cur, self._channel_groups(cur.get(CONF_REMOTE_GROUPS) or []), self._own_players())
+        return self.async_show_form(step_id="init", data_schema=schema, errors=errors)

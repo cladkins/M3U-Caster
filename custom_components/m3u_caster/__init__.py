@@ -20,7 +20,7 @@ from .coordinator import M3UCasterCoordinator
 from .services import async_setup_services
 
 _LOGGER = logging.getLogger(__name__)
-PLATFORMS: list[Platform] = [Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.MEDIA_PLAYER, Platform.SENSOR]
 FRONTEND_URL = f"/{DOMAIN}/m3u-caster-tv-card.js"
 FRONTEND_FILE = Path(__file__).parent / "frontend" / "m3u-caster-tv-card.js"
 type M3UCasterConfigEntry = ConfigEntry[M3UCasterCoordinator]

@@ -1,6 +1,6 @@
 # M3U Caster for Home Assistant
 
-Cast live channels from any Xtream-compatible IPTV server (any provider exposing a `player_api.php` endpoint) to Roku, Apple TV, and Chromecast from a Home Assistant dashboard, with EPG now/next in the picker.
+Cast live channels from any Xtream-compatible IPTV server (any provider exposing a `player_api.php` endpoint) to Roku, Apple TV, and Chromecast from a Home Assistant dashboard, with EPG now/next in the picker. A per-TV channel player entity brings the same channels to remote-first cards such as RosCard on the Astrion remote.
 
 ## Install
 
@@ -38,6 +38,18 @@ Add card > M3U Caster QuadStream Card: pick the Apple TV and playlist, choose up
 
 Two things to know. QuadStream's own dashboard states that private sets are readable by anyone who knows the set id and that the secret only restricts editing; the Apple TV fetches the set without logging in, and the stream URLs include the playlist credentials, exactly as they do when you fill in the dashboard by hand. And four streams from one playlist means four sessions on that account, which must allow that many.
 
+## Channel player and the Astrion remote
+
+The Astrion remote renders only the ROS card types from RosCard, and those cards drive plain Home Assistant entities: the TV(ROS) and Media Player(ROS) cards show a media player's source list and pick from it. So instead of a card of its own, the integration gives each TV you choose a media_player entity whose sources are the playlist's channels.
+
+Setup: Settings > Devices & Services > M3U Caster > Configure. Under "TVs to add a channel player for", pick the TV's media_player (the Apple TV or Roku entity you already cast to). Optionally limit "Channel groups" so a long playlist stays short on the remote's screen. Save, and a `media_player.m3u_caster_<playlist>_<tv>` entity appears on the playlist's device.
+
+On the Astrion dashboard, add one Media Player(ROS) card and give it that entity, or set your existing TV(ROS) card's `source` to it. The remote then lists the channels as sources. Picking one casts it to the TV over the same path as the dashboard card. Stop ends the stream the same way the card's Stop does. Power off puts the TV to sleep. Play, pause, and volume pass through to the TV when it supports them.
+
+State mirrors the TV: off or standby when the TV is, playing while a cast is showing, idle otherwise. While a cast is showing, the media title is the current programme and the channel logo is the artwork, so the Media Player(ROS) card's metadata line shows what is on. Attributes: `target`, `playlist`, and while playing `stream_id`, `group`, `now_start`, `now_end`, `next`, `next_start`.
+
+Source names are channel names. Two channels with the same name get their stream id appended, `CNN [1234]`, so each source stays unique. `media_player.select_source` accepts the exact source or, when unambiguous, the bare channel name.
+
 ## Services
 
 `m3u_caster.play_stream`: `stream_id`, `media_player`, optional `cast_type`, `app_link`, `auto_confirm`.
@@ -48,4 +60,4 @@ Two things to know. QuadStream's own dashboard states that private sets are read
 
 ## Guide sensor
 
-One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel count. Attributes: `playlist`, `channels` (stream_id, name, group, logo, label, now, now_start, now_end, next, next_start), and `now_casting` (media_player entity id to the stream_id last cast there). Useful for automations.
+One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel count. Attributes: `playlist`, `channels` (stream_id, name, group, logo, label, now, now_start, now_end, next, next_start), and `now_casting` (media_player entity id to the stream_id last cast there). Useful for automations. Casts made through a channel player show up here too, and casts made from the cards show up on the channel player.
