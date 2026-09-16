@@ -206,16 +206,18 @@ class M3uCasterTvCardEditor extends HTMLElement {
       });
       this.appendChild(this._form);
     }
+    // hass can arrive before setConfig, so never assume the config is there yet.
+    const cfg = this._config || {};
     const guides = Object.keys(this._hass.states).filter((e) => e.startsWith("sensor.") && this._hass.states[e].attributes.channels);
     this._form.hass = this._hass;
-    this._form.data = this._config;
+    this._form.data = cfg;
     this._form.schema = [
       { name: "media_player", required: true, selector: { entity: { domain: "media_player" } } },
       { name: "cast_type", selector: { select: { mode: "dropdown", options: CAST_TYPES } } },
       { name: "app_link", selector: { text: {} } },
       { name: "auto_confirm", selector: { boolean: {} } },
       { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
-      groupSchema(this._hass, this._config.guide),
+      groupSchema(this._hass, cfg.guide),
       { name: "title", selector: { text: {} } },
       { name: "show_logo", selector: { boolean: {} } },
     ];
@@ -326,13 +328,14 @@ class M3uCasterQuadCardEditor extends HTMLElement {
       });
       this.appendChild(this._form);
     }
+    const cfg = this._config || {};
     const guides = Object.keys(this._hass.states).filter((e) => e.startsWith("sensor.") && this._hass.states[e].attributes.channels);
     this._form.hass = this._hass;
-    this._form.data = this._config;
+    this._form.data = cfg;
     this._form.schema = [
       { name: "media_player", required: true, selector: { entity: { domain: "media_player" } } },
       { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
-      groupSchema(this._hass, this._config.guide),
+      groupSchema(this._hass, cfg.guide),
       { name: "title", selector: { text: {} } },
     ];
   }
