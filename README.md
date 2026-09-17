@@ -59,6 +59,8 @@ Source names are channel names. Two channels with the same name get their stream
 `m3u_caster.sync_playlist`: re-sync a playlist on the panel, optional `playlist_uuid`. Requires an API token.
 `m3u_caster.refresh`: re-poll channels and EPG now.
 
+Polling is light on the panel. Each poll fetches the channel and category lists, then asks for the guide only of channels whose current programme ends before the next poll, with one full guide pass every six hours. Startup fetches the channel list alone and fills the guide in a few seconds later.
+
 ## Guide sensor
 
 One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel count. Attributes: `playlist`, `channels` (stream_id, name, group, logo, label, now, now_start, now_end, next, next_start), and `now_casting` (media_player entity id to the stream_id last cast there). Useful for automations. Casts made through a channel player show up here too, and casts made from the cards show up on the channel player.
