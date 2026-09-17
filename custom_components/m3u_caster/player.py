@@ -19,6 +19,9 @@ from .const import DEFAULT_APP_LINK
 _LOGGER = logging.getLogger(__name__)
 ROKU_ECP_PORT = 8060
 ROKU_STREAM_TESTER_APP_NAME = "Roku Stream Tester"
+STREAM_WARMUP_ATTEMPTS = 3
+STREAM_WARMUP_TIMEOUT = 2
+STREAM_WARMUP_BACKOFF = 1
 
 
 def detect_cast_type(hass: HomeAssistant, entity_id: str) -> str:
@@ -77,6 +80,29 @@ async def _async_roku_app_id(session: aiohttp.ClientSession, host: str, name: st
     return None
 
 
+async def _async_warm_stream(session: aiohttp.ClientSession, url: str) -> None:
+    """Give a stream proxy a moment to start before handing the URL to a player.
+
+    Some IPTV stream proxies (m3u-proxy and similar) start transcoding or remuxing
+    lazily on the first request and can answer a cold request with an error body
+    instead of the manifest. VLC on Apple TV tends to just buffer through that, but
+    Roku Stream Tester surfaces it as a hard "malformed data" error instead of
+    retrying. A quick, best-effort GET here usually lets the proxy warm up first, at
+    the cost of one fast round trip when the stream is already warm and nothing when
+    it never responds; casting proceeds either way, warmed or not.
+    """
+    for attempt in range(STREAM_WARMUP_ATTEMPTS):
+        try:
+            timeout = aiohttp.ClientTimeout(total=STREAM_WARMUP_TIMEOUT)
+            async with session.get(url, timeout=timeout) as resp:
+                if resp.status == 200:
+                    return
+        except (aiohttp.ClientError, asyncio.TimeoutError):
+            pass
+        if attempt < STREAM_WARMUP_ATTEMPTS - 1:
+            await asyncio.sleep(STREAM_WARMUP_BACKOFF)
+
+
 async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, title: str) -> bool:
     """Deep-link a video into Roku Stream Tester via ECP, bypassing HA's roku integration.
 
@@ -101,6 +127,7 @@ async def _async_roku_ecp_play(hass: HomeAssistant, entity_id: str, url: str, ti
         _LOGGER.warning("no roku host on file for %s; falling back to media_player.play_media", entity_id)
         return False
     session = async_get_clientsession(hass)
+    await _async_warm_stream(session, url)
     try:
         app_id = await _async_roku_app_id(session, host, ROKU_STREAM_TESTER_APP_NAME)
         if not app_id:
