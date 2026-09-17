@@ -44,8 +44,8 @@ class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity
         for c in channels.values():
             now, nxt = c.get("now") or {}, c.get("next") or {}
             rows.append({
-                "stream_id": c["stream_id"], "name": c["name"], "group": c["group"], "logo": c["logo"],
-                "label": c["label"],
+                "stream_id": c["stream_id"], "name": c["name"], "number": c.get("number"), "group": c["group"],
+                "logo": c["logo"], "label": c["label"],
                 "now": now.get("title"), "now_start": now.get("start"), "now_end": now.get("end"),
                 "next": nxt.get("title"), "next_start": nxt.get("start"),
             })

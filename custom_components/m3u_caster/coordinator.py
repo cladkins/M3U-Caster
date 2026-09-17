@@ -74,6 +74,7 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             channels[sid] = {
                 "stream_id": sid,
                 "name": str(s.get("name", sid)),
+                "number": s.get("num"),
                 "group": categories.get(str(s.get("category_id")), ""),
                 "logo": s.get("stream_icon") or "",
                 "tvg_id": s.get("epg_channel_id") or "",

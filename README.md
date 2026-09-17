@@ -33,6 +33,17 @@ The On TV strip shows what the player is doing. On Roku it names the channel the
 - **Connections**: most IPTV accounts allow one stream at a time. Casting to a second TV from the same playlist usually ends the first.
 - **Stream format**: VLC and Stream Tester play raw MPEG-TS, so a panel that answers `.m3u8` URLs with a TS stream still works for single-TV casts. QuadStream plays through Apple's own player, which needs real HLS. If your panel proxies streams as TS, give the multiview channels a stream profile that repackages to HLS without re-encoding (`-c:v copy -c:a copy -f hls`).
 
+## Guide card (tablet)
+
+Add card > M3U Caster Guide Card for a dense, cable-box-style channel list suited to a wall-mounted or handheld tablet: logo, channel number when the panel provides one, and current programme on each row.
+
+- **Guide sensor**: the playlist this card shows. One playlist per card, same as the other two.
+- **TVs to offer when a channel is tapped**: a fixed list you choose in the editor, not every media_player Home Assistant knows about. Channel player entities from this integration are left out of the picker, since they take a source name rather than a cast command.
+- **Channel groups**: limit the list to these playlist groups. Empty means all, with a dropdown to narrow further on the fly, same as the other cards.
+- **Card title**: optional heading. Defaults to the playlist name.
+
+Tap a row to open a sheet listing the configured TVs, each with its current status, and tap a TV to cast there. Tap the TV a channel is already playing on and the sheet stops it instead of re-casting it. A small badge on a row names any configured TV currently showing that channel, so a glance at the list shows what is on without opening the sheet.
+
 ## QuadStream multiview (Apple TV)
 
 QuadStream plays four streams in a grid on an Apple TV and reads its sources from a stream set on quadstream.tv.
@@ -90,7 +101,7 @@ Polling is light on the panel. Each poll fetches the channel and category lists,
 One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel count. Attributes:
 
 - `playlist`: the playlist's display name.
-- `channels`: one row per channel with `stream_id`, `name`, `group`, `logo`, `label`, `now`, `now_start`, `now_end`, `next`, `next_start`.
+- `channels`: one row per channel with `stream_id`, `name`, `number` (from the panel, when it provides one, else null), `group`, `logo`, `label`, `now`, `now_start`, `now_end`, `next`, `next_start`.
 - `now_casting`: media_player entity id to the stream_id last cast there. Casts made through a channel player show up here too, and casts made from the cards show up on the channel player.
 
 Useful for automations. The channel table is not written to the recorder, so a large playlist does not bloat the database.
