@@ -365,14 +365,16 @@ class M3uCasterGuideCard extends HTMLElement {
   static getStubConfig(hass) {
     const guide = Object.keys(hass.states).find((e) => e.startsWith("sensor.") && hass.states[e].attributes.channels);
     const tv = Object.keys(hass.states).find((e) => e.startsWith("media_player.") && !hass.states[e].attributes.target);
-    return { guide: guide || "", targets: tv ? [tv] : [], title: "" };
+    return { guide: guide || "", targets: tv ? [tv] : [], title: "", app_link: DEFAULT_APP_LINK, auto_confirm: true, target_cast_types: {} };
   }
   setConfig(config) {
     if (!config.guide) throw new Error("guide sensor is required");
-    this._config = { targets: [], ...config };
+    this._config = { targets: [], target_cast_types: {}, app_link: DEFAULT_APP_LINK, auto_confirm: true, ...config };
     this._group = this._group || "";
     this._picker = this._picker || null; // the channel the picker sheet is open for, or null when closed
   }
+  // Each configured TV can pin its own cast type in the editor; "auto" (the default) detects it same as elsewhere.
+  _castTypeFor(targetId) { return (this._config.target_cast_types || {})[targetId] || "auto"; }
   set hass(hass) { this._hass = hass; this._render(); }
   getCardSize() { return 8; }
 
@@ -398,11 +400,17 @@ class M3uCasterGuideCard extends HTMLElement {
   async _pick(targetId) {
     const ch = this._picker;
     if (!ch) return;
+    const castType = this._castTypeFor(targetId);
     const playing = playingChannelFor(this._hass, this._config.guide, this._channels(), targetId);
     if (playing && playing.stream_id === ch.stream_id) {
-      await this._hass.callService("m3u_caster", "stop", { media_player: targetId, cast_type: "auto" });
+      await this._hass.callService("m3u_caster", "stop", { media_player: targetId, cast_type: castType });
     } else {
-      await this._hass.callService("m3u_caster", "play_stream", { stream_id: ch.stream_id, media_player: targetId, cast_type: "auto" });
+      const data = { stream_id: ch.stream_id, media_player: targetId, cast_type: castType };
+      if (castType === "apple_tv_app") {
+        data.app_link = this._config.app_link || DEFAULT_APP_LINK;
+        data.auto_confirm = this._config.auto_confirm !== false;
+      }
+      await this._hass.callService("m3u_caster", "play_stream", data);
     }
     this._closePicker();
   }
@@ -539,7 +547,7 @@ class M3uCasterGuideCard extends HTMLElement {
 }
 
 class M3uCasterGuideCardEditor extends HTMLElement {
-  setConfig(config) { this._config = { targets: [], ...config }; this._render(); }
+  setConfig(config) { this._config = { targets: [], target_cast_types: {}, ...config }; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
   _render() {
     if (!this._hass) return;
@@ -548,12 +556,28 @@ class M3uCasterGuideCardEditor extends HTMLElement {
       this._form.computeLabel = (s) => ({
         guide: "M3U Caster playlist (guide sensor)", targets: "TVs to offer when a channel is tapped",
         groups: "Channel groups (empty = all)", title: "Card title (optional)",
+        app_link: "App link template (used when a TV's cast type is Apple TV app, {url} = stream)",
+        auto_confirm: "Auto press Select on the Open prompt (Apple TV app)",
       }[s.name] || s.name);
+      // Keep the per-TV cast type map across a plain form edit: ha-form's value only carries its own schema fields.
       this._form.addEventListener("value-changed", (e) => {
-        this._config = e.detail.value;
-        this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
+        this._config = { ...this._config, ...e.detail.value };
+        this._emit();
       });
+      this._types = document.createElement("div");
+      this._types.className = "target-types";
+      const style = document.createElement("style");
+      style.textContent = `
+        .target-types { margin-top: 16px; }
+        .target-types .hdr { font-size: .85em; opacity: .7; margin-bottom: 6px; }
+        .target-types .row { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+                              padding: 6px 0; border-bottom: 1px solid var(--divider-color); }
+        .target-types select { padding: 4px 6px; border-radius: 4px; border: 1px solid var(--divider-color);
+                                background: var(--card-background-color); color: var(--primary-text-color); }
+        .target-types .empty { font-size: .85em; opacity: .6; }`;
+      this.appendChild(style);
       this.appendChild(this._form);
+      this.appendChild(this._types);
     }
     const cfg = this._config || {};
     const guides = Object.keys(this._hass.states).filter((e) => e.startsWith("sensor.") && this._hass.states[e].attributes.channels);
@@ -565,8 +589,42 @@ class M3uCasterGuideCardEditor extends HTMLElement {
       { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
       { name: "targets", required: true, selector: { entity: { domain: "media_player", multiple: true, exclude_entities: ownPlayers } } },
       groupSchema(this._hass, cfg.guide),
+      { name: "app_link", selector: { text: {} } },
+      { name: "auto_confirm", selector: { boolean: {} } },
       { name: "title", selector: { text: {} } },
     ];
+    this._renderTargetTypes(cfg);
+  }
+  _renderTargetTypes(cfg) {
+    const targets = (cfg.targets || []).filter(Boolean);
+    const sig = targets.join(",");
+    if (this._types.dataset.sig === sig) {
+      this._types.querySelectorAll("select[data-target]").forEach((s) => {
+        s.value = (cfg.target_cast_types || {})[s.dataset.target] || "auto";
+      });
+      return;
+    }
+    this._types.dataset.sig = sig;
+    if (!targets.length) {
+      this._types.innerHTML = `<div class="empty">Pick TVs above to set each one's cast type.</div>`;
+      return;
+    }
+    const opts = CAST_TYPES.map((c) => `<option value="${esc(c.value)}">${esc(c.label)}</option>`).join("");
+    this._types.innerHTML = `<div class="hdr">Cast type per TV</div>` + targets.map((id) => {
+      const name = (this._hass.states[id] && this._hass.states[id].attributes.friendly_name) || id;
+      return `<div class="row"><span>${esc(name)}</span><select data-target="${esc(id)}">${opts}</select></div>`;
+    }).join("");
+    this._types.querySelectorAll("select[data-target]").forEach((s) => {
+      s.value = (cfg.target_cast_types || {})[s.dataset.target] || "auto";
+      s.addEventListener("change", (e) => {
+        const types = { ...(this._config.target_cast_types || {}), [e.target.dataset.target]: e.target.value };
+        this._config = { ...this._config, target_cast_types: types };
+        this._emit();
+      });
+    });
+  }
+  _emit() {
+    this.dispatchEvent(new CustomEvent("config-changed", { detail: { config: this._config }, bubbles: true, composed: true }));
   }
 }
 
