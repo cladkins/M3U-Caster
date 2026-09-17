@@ -24,13 +24,20 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.api = api
         self.epg_limit = epg_limit
 
+    def _scrub(self, text: str) -> str:
+        """Keep the playlist credentials out of log lines: aiohttp errors quote the full request URL."""
+        for secret in (self.api.password, self.api.username, getattr(self.api, "api_token", None)):
+            if secret:
+                text = text.replace(str(secret), "***")
+        return text
+
     async def _async_update_data(self) -> dict[str, Any]:
         try:
             streams, categories = await asyncio.gather(self.api.get_live_streams(), self.api.get_live_categories())
         except M3UCasterAuthError as err:
-            raise UpdateFailed(f"auth failed: {err}") from err
+            raise UpdateFailed(f"auth failed: {self._scrub(str(err))}") from err
         except Exception as err:  # noqa: BLE001
-            raise UpdateFailed(f"channel fetch failed: {err}") from err
+            raise UpdateFailed(f"channel fetch failed: {self._scrub(str(err))}") from err
 
         channels: dict[str, dict[str, Any]] = {}
         for s in streams:

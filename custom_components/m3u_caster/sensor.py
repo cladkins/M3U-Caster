@@ -23,6 +23,9 @@ class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity
     _attr_name = "Guide"
     _attr_icon = "mdi:television-guide"
     _attr_native_unit_of_measurement = "channels"
+    # The channel table is live data for the cards, not history: a big playlist blows past the
+    # recorder's attribute size limit and would only log a warning on every write.
+    _unrecorded_attributes = frozenset({"channels", "now_casting"})
 
     def __init__(self, coordinator: M3UCasterCoordinator, entry_id: str, playlist_name: str) -> None:
         super().__init__(coordinator)

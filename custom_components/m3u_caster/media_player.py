@@ -74,6 +74,7 @@ class M3UCasterChannelPlayer(CoordinatorEntity[M3UCasterCoordinator], MediaPlaye
     _attr_has_entity_name = True
     _attr_device_class = MediaPlayerDeviceClass.TV
     _attr_icon = "mdi:television-play"
+    _unrecorded_attributes = frozenset({"source_list"})  # can run to hundreds of channels
 
     def __init__(
         self, coordinator: M3UCasterCoordinator, entry_id: str, playlist: str, target: str, name: str, groups: list[str],
