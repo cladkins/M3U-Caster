@@ -97,7 +97,7 @@ Source names are channel names. Two channels with the same name get their stream
 - `m3u_caster.sync_playlist`: re-sync a playlist on the panel, optional `playlist_uuid`. Requires an API token.
 - `m3u_caster.refresh`: re-poll channels and EPG now.
 
-Polling is light on the panel. Each poll fetches the channel and category lists, then asks for the guide only of channels whose current programme ends before the next poll, with one full guide pass every six hours. Startup fetches the channel list alone and fills the guide in a few seconds later.
+Polling is light on the panel. Each poll fetches the channel and category lists, then asks for the guide only of channels whose current programme ends before the next poll, with one full guide pass every six hours. Startup fetches the channel list alone and fills the guide in a few seconds later. Some panels answer that per-channel lookup inconsistently, real listings on one poll and an empty list on the next for the same channel; an empty response is treated like a failed one and keeps the channel's last known programme rather than blanking it.
 
 ## EPG: an alternate XMLTV URL
 

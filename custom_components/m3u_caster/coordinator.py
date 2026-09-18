@@ -128,6 +128,11 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     except Exception as err:  # noqa: BLE001
                         _LOGGER.debug("EPG fetch failed for %s: %s", sid, err)
                         return
+                if not listings:
+                    # Some panels answer this endpoint inconsistently, real listings on one poll,
+                    # an empty list on the next for the same channel. Treat that like a failed fetch
+                    # and keep whatever we last knew instead of blanking a channel that just had data.
+                    return
                 now_ts = dt_util.utcnow()
                 current = upcoming = None
                 for p in listings:
@@ -136,7 +141,7 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         current = p
                     elif start and start > now_ts and upcoming is None:
                         upcoming = p
-                if current is None and listings:
+                if current is None:
                     current = listings[0]
                     upcoming = listings[1] if len(listings) > 1 else None
                 channels[sid]["now"] = current
