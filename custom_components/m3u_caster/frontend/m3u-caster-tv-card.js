@@ -613,10 +613,10 @@ class M3uCasterGuideCard extends HTMLElement {
           .chan-row .badges { flex:0 0 auto; }
           .timeline-scroll { flex:1; overflow:auto; max-height:60vh; position:relative; }
           .timeline-inner { position:relative; }
-          .ruler { height:${GRID_RULER_PX}px; position:sticky; top:0; background:var(--card-background-color); z-index:1; border-bottom:1px solid var(--divider-color); }
+          .ruler { height:${GRID_RULER_PX}px; box-sizing:border-box; position:sticky; top:0; background:var(--card-background-color); z-index:1; border-bottom:1px solid var(--divider-color); }
           .ruler .mark { position:absolute; top:0; height:100%; font-size:.7em; opacity:.65; padding-left:4px;
                          border-left:1px solid var(--divider-color); display:flex; align-items:center; white-space:nowrap; }
-          .track { position:relative; height:${GRID_ROW_PX}px; border-bottom:1px solid var(--divider-color); }
+          .track { position:relative; height:${GRID_ROW_PX}px; box-sizing:border-box; border-bottom:1px solid var(--divider-color); }
           .block { position:absolute; top:3px; bottom:3px; border-radius:6px; background:var(--secondary-background-color);
                    overflow:hidden; padding:0 6px; display:flex; align-items:center; font-size:.72em; white-space:nowrap;
                    text-overflow:ellipsis; cursor:pointer; }
