@@ -86,7 +86,7 @@ class M3uCasterTvCard extends HTMLElement {
   setConfig(config) {
     if (!config.media_player) throw new Error("media_player is required");
     if (!config.guide) throw new Error("guide sensor is required");
-    this._config = { cast_type: "auto", show_logo: true, app_link: DEFAULT_APP_LINK, auto_confirm: true, ...config };
+    this._config = { cast_type: "auto", show_logo: true, show_footer: true, app_link: DEFAULT_APP_LINK, auto_confirm: true, ...config };
     this._selected = this._selected || "";
     this._group = this._group || "";
   }
@@ -195,7 +195,9 @@ class M3uCasterTvCard extends HTMLElement {
     syncGroupPicker(r.querySelector("select.grp"), groups, this._group);
     syncPicker(r.querySelector("select.ch"), channels, this._selected, "Choose a game or channel");
     const img = r.querySelector(".now img");
-    img.style.display = this._config.show_logo && sel && sel.logo ? "" : "none";
+    // visibility, not display: the image's box stays reserved either way, so toggling the logo
+    // setting (or just not having one for this channel) never reflows the row next to it.
+    img.style.visibility = this._config.show_logo && sel && sel.logo ? "visible" : "hidden";
     if (sel && sel.logo) img.src = sel.logo;
     r.querySelector(".now .t").textContent = sel ? (sel.now || sel.name) : "";
     r.querySelector(".now .s").textContent = sel
@@ -203,12 +205,13 @@ class M3uCasterTvCard extends HTMLElement {
       : "";
     r.querySelector("button.play").disabled = !this._selected || tvState === "unavailable";
     r.querySelector("button.stop").disabled = tvState === "unavailable";
-    r.querySelector(".pl").textContent = playlist ? `Playlist: ${playlist}  ·  Cast: ${castLabel(this._config.cast_type)}` : "";
+    r.querySelector(".pl").textContent = this._config.show_footer !== false && playlist
+      ? `Playlist: ${playlist}  ·  Cast: ${castLabel(this._config.cast_type)}` : "";
   }
 }
 
 class M3uCasterTvCardEditor extends HTMLElement {
-  setConfig(config) { this._config = { cast_type: "auto", show_logo: true, ...config }; this._render(); }
+  setConfig(config) { this._config = { cast_type: "auto", show_logo: true, show_footer: true, ...config }; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
   _render() {
     if (!this._hass) return;
@@ -217,6 +220,7 @@ class M3uCasterTvCardEditor extends HTMLElement {
       this._form.computeLabel = (s) => ({
         media_player: "TV / media player", cast_type: "Cast type", guide: "M3U Caster playlist (guide sensor)",
         groups: "Channel groups (empty = all)", title: "Card title (optional)", show_logo: "Show channel logo",
+        show_footer: "Show playlist & cast info at the bottom",
         app_link: "App link template (apple_tv_app only, {url} = stream)", auto_confirm: "Auto press Select on the Open prompt",
       }[s.name] || s.name);
       this._form.addEventListener("value-changed", (e) => {
@@ -239,6 +243,7 @@ class M3uCasterTvCardEditor extends HTMLElement {
       groupSchema(this._hass, cfg.guide),
       { name: "title", selector: { text: {} } },
       { name: "show_logo", selector: { boolean: {} } },
+      { name: "show_footer", selector: { boolean: {} } },
     ];
   }
 }

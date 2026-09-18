@@ -20,7 +20,8 @@ Upgrading from the pre-HACS install (domain `m3u_editor`): remove that integrati
 - **Auto confirm**: presses Select on the tvOS "Open in app?" prompt.
 - **Channel groups**: limit the card to these playlist groups. Empty means all.
 - **Card title**: optional heading. Defaults to the TV's name.
-- **Show channel logo**: toggles the logo next to the selected channel.
+- **Show channel logo**: toggles the logo next to the selected channel. Its space stays reserved either way, so toggling it, or picking a channel with no logo, never changes the card's height.
+- **Show playlist & cast info at the bottom**: toggles the small `Playlist: ... · Cast: ...` line under the buttons.
 
 The picker lists each channel with its current programme and start time, and groups channels by category when a playlist has more than one. When more than one group is available, a group dropdown sits above the picker to narrow the list on the fly; a pick outside the chosen group clears. The QuadStream card has the same option, and each of its four stream slots has its own group dropdown, so a multiview can mix games from four different groups.
 
