@@ -73,6 +73,12 @@ class M3UCasterAPI:
     async def sync_playlist(self, uuid: str, force: bool = True) -> Any:
         return await self._rest(f"/playlist/{uuid}/sync", force=str(force).lower())
 
+    async def get_epg_xml(self, url: str) -> bytes:
+        """Fetch a provider's own XMLTV guide URL as-is; it carries its own auth, so no params are added."""
+        async with self._session.get(url, timeout=TIMEOUT) as resp:
+            resp.raise_for_status()
+            return await resp.read()
+
     def stream_url(self, stream_id: str) -> str:
         return f"{self.base_url}/live/{self.username}/{self.password}/{stream_id}.m3u8"
 

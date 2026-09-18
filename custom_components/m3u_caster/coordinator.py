@@ -14,6 +14,7 @@ from homeassistant.util import dt as dt_util
 
 from .api import M3UCasterAPI, M3UCasterAuthError
 from .const import DOMAIN
+from .epg import parse_xmltv
 
 _LOGGER = logging.getLogger(__name__)
 TITLE_MAX = 40
@@ -24,10 +25,11 @@ EPG_FOLLOWUP_SECS = 5
 
 
 class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
-    def __init__(self, hass: HomeAssistant, api: M3UCasterAPI, interval: int, epg_limit: int) -> None:
+    def __init__(self, hass: HomeAssistant, api: M3UCasterAPI, interval: int, epg_limit: int, epg_url: str | None = None) -> None:
         super().__init__(hass, _LOGGER, name=DOMAIN, update_interval=timedelta(seconds=interval))
         self.api = api
         self.epg_limit = epg_limit
+        self.epg_url = epg_url
         self._epg_full_at: datetime | None = None
         self._first_pass = True
 
@@ -48,6 +50,34 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             self._epg_full_at = now_ts
             return list(channels)
         return [sid for sid, c in channels.items() if self._epg_stale(c, now_ts)]
+
+    async def _apply_xmltv_epg(self, channels: dict[str, dict[str, Any]]) -> None:
+        """Fetch and apply a provider's own XMLTV guide, joined to channels by tvg_id (epg_channel_id).
+
+        A fetch or parse failure just leaves now/next unset for this poll; it never fails the
+        channel/category fetch that already succeeded above.
+        """
+        try:
+            data = await self.api.get_epg_xml(self.epg_url)
+        except Exception as err:  # noqa: BLE001
+            _LOGGER.debug("EPG XML fetch failed: %s", self._scrub(str(err)))
+            return
+        by_channel = parse_xmltv(data)
+        now_ts = dt_util.utcnow()
+        for c in channels.values():
+            listings = by_channel.get(c.get("tvg_id") or "")
+            if not listings:
+                continue
+            current = upcoming = None
+            for p in listings:
+                if current is None and p["end"] and p["start"] <= now_ts <= p["end"]:
+                    current = p
+                elif p["start"] > now_ts and upcoming is None:
+                    upcoming = p
+            # Unlike the per-channel lookup, no "closest listing" fallback here: this file can be sparse
+            # and stale, and a mismatched programme from hours ago is worse than showing nothing.
+            c["now"] = current
+            c["next"] = upcoming
 
     def _scrub(self, text: str) -> str:
         """Keep the playlist credentials out of log lines: aiohttp errors quote the full request URL."""
@@ -83,32 +113,36 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "next": old.get("next"),
             }
 
-        targets = self._epg_targets(channels, dt_util.utcnow())
-        _LOGGER.debug("guide refresh: %d of %d channels", len(targets), len(channels))
-        sem = asyncio.Semaphore(6)
+        if self.epg_url:
+            # One request covers the whole guide, so there's no reason to ration it like the per-channel lookup.
+            await self._apply_xmltv_epg(channels)
+        else:
+            targets = self._epg_targets(channels, dt_util.utcnow())
+            _LOGGER.debug("guide refresh: %d of %d channels", len(targets), len(channels))
+            sem = asyncio.Semaphore(6)
 
-        async def fetch_epg(sid: str) -> None:
-            async with sem:
-                try:
-                    listings = await self.api.get_short_epg(sid, self.epg_limit)
-                except Exception as err:  # noqa: BLE001
-                    _LOGGER.debug("EPG fetch failed for %s: %s", sid, err)
-                    return
-            now_ts = dt_util.utcnow()
-            current = upcoming = None
-            for p in listings:
-                start, end = p.get("start"), p.get("end")
-                if current is None and (p.get("now_playing") or (start and end and start <= now_ts <= end)):
-                    current = p
-                elif start and start > now_ts and upcoming is None:
-                    upcoming = p
-            if current is None and listings:
-                current = listings[0]
-                upcoming = listings[1] if len(listings) > 1 else None
-            channels[sid]["now"] = current
-            channels[sid]["next"] = upcoming
+            async def fetch_epg(sid: str) -> None:
+                async with sem:
+                    try:
+                        listings = await self.api.get_short_epg(sid, self.epg_limit)
+                    except Exception as err:  # noqa: BLE001
+                        _LOGGER.debug("EPG fetch failed for %s: %s", sid, err)
+                        return
+                now_ts = dt_util.utcnow()
+                current = upcoming = None
+                for p in listings:
+                    start, end = p.get("start"), p.get("end")
+                    if current is None and (p.get("now_playing") or (start and end and start <= now_ts <= end)):
+                        current = p
+                    elif start and start > now_ts and upcoming is None:
+                        upcoming = p
+                if current is None and listings:
+                    current = listings[0]
+                    upcoming = listings[1] if len(listings) > 1 else None
+                channels[sid]["now"] = current
+                channels[sid]["next"] = upcoming
 
-        await asyncio.gather(*(fetch_epg(sid) for sid in targets))
+            await asyncio.gather(*(fetch_epg(sid) for sid in targets))
 
         counts = Counter(c["name"] for c in channels.values())
         for c in channels.values():

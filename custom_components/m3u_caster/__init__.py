@@ -13,7 +13,7 @@ from homeassistant.loader import async_get_integration
 
 from .api import M3UCasterAPI
 from .const import (
-    CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_PASSWORD, CONF_SCAN_INTERVAL,
+    CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_EPG_URL, CONF_PASSWORD, CONF_SCAN_INTERVAL,
     CONF_USERNAME, DEFAULT_EPG_LIMIT, DEFAULT_SCAN_INTERVAL, DOMAIN,
 )
 from .coordinator import M3UCasterCoordinator
@@ -68,6 +68,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: M3UCasterConfigEntry) ->
         hass, api,
         entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
         entry.options.get(CONF_EPG_LIMIT, DEFAULT_EPG_LIMIT),
+        entry.options.get(CONF_EPG_URL) or None,
     )
     await coordinator.async_config_entry_first_refresh()
     entry.runtime_data = coordinator

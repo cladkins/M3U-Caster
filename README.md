@@ -98,6 +98,12 @@ Source names are channel names. Two channels with the same name get their stream
 
 Polling is light on the panel. Each poll fetches the channel and category lists, then asks for the guide only of channels whose current programme ends before the next poll, with one full guide pass every six hours. Startup fetches the channel list alone and fills the guide in a few seconds later.
 
+## EPG: an alternate XMLTV URL
+
+Some panels don't return anything from the per-channel guide lookup this integration uses by default, `get_short_epg`, but do publish a full XMLTV guide file at a URL of their own, separate from the Xtream login and often shown in the panel's own dashboard rather than guessable from the server URL. Settings > Devices & Services > M3U Caster > Configure > "XMLTV guide URL" takes that URL directly.
+
+When set, this replaces the per-channel lookup entirely: one fetch of that file every poll, parsed and matched to channels by the panel's own `epg_channel_id`, rather than one request per channel. A channel whose id isn't in the file, or one the panel never assigned an id to, simply shows no programme; that's the file lacking the channel, not a fault in the fetch. A programme only counts as "now" when the file's own start and end actually bracket the current time. A file that is stale or sparse, which is common, correctly leaves those channels blank rather than showing an old or nearby programme as current. A failed fetch keeps the last successful guide rather than blanking it, the same as a poll that finds nothing new to ask for under the per-channel path.
+
 ## Guide sensor
 
 One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel count. Attributes:

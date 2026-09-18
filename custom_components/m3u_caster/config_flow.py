@@ -13,7 +13,7 @@ from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import M3UCasterAPI, M3UCasterAuthError
 from .const import (
-    CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_PASSWORD, CONF_PLAYLIST, CONF_PLAYLIST_NAME,
+    CONF_API_TOKEN, CONF_BASE_URL, CONF_EPG_LIMIT, CONF_EPG_URL, CONF_PASSWORD, CONF_PLAYLIST, CONF_PLAYLIST_NAME,
     CONF_QUADSTREAM_SECRET, CONF_QUADSTREAM_USERNAME, CONF_REMOTE_GROUPS, CONF_REMOTE_PLAYERS, CONF_SCAN_INTERVAL,
     CONF_USERNAME, DEFAULT_BASE_URL, DEFAULT_EPG_LIMIT, DEFAULT_SCAN_INTERVAL, DEFAULT_USERNAME, DOMAIN,
 )
@@ -41,6 +41,8 @@ def _options_schema(cur: dict[str, Any], groups: list[str], own_players: list[st
             selector.NumberSelector(selector.NumberSelectorConfig(min=60, max=3600, step=30, unit_of_measurement="s")),
         vol.Required(CONF_EPG_LIMIT, default=cur.get(CONF_EPG_LIMIT, DEFAULT_EPG_LIMIT)):
             selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=10, step=1)),
+        vol.Optional(CONF_EPG_URL, default=cur.get(CONF_EPG_URL, "")): selector.TextSelector(
+            selector.TextSelectorConfig(type=selector.TextSelectorType.URL)),
         vol.Optional(CONF_REMOTE_PLAYERS, default=cur.get(CONF_REMOTE_PLAYERS, [])): selector.EntitySelector(
             selector.EntitySelectorConfig(domain="media_player", multiple=True, exclude_entities=own_players)),
         vol.Optional(CONF_REMOTE_GROUPS, default=cur.get(CONF_REMOTE_GROUPS, [])): selector.SelectSelector(
@@ -157,6 +159,7 @@ class M3UCasterOptionsFlow(OptionsFlow):
         if user_input is not None:
             user_input[CONF_SCAN_INTERVAL] = int(user_input[CONF_SCAN_INTERVAL])
             user_input[CONF_EPG_LIMIT] = int(user_input[CONF_EPG_LIMIT])
+            user_input[CONF_EPG_URL] = (user_input.get(CONF_EPG_URL) or "").strip()
             user_input[CONF_REMOTE_PLAYERS] = [p for p in (user_input.get(CONF_REMOTE_PLAYERS) or []) if p]
             user_input[CONF_REMOTE_GROUPS] = [g.strip() for g in (user_input.get(CONF_REMOTE_GROUPS) or []) if g.strip()]
             username = (user_input.get(CONF_QUADSTREAM_USERNAME) or "").strip()

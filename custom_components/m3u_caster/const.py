@@ -11,6 +11,7 @@ CONF_PLAYLIST: Final = "playlist"
 CONF_PLAYLIST_NAME: Final = "playlist_name"
 CONF_SCAN_INTERVAL: Final = "scan_interval"
 CONF_EPG_LIMIT: Final = "epg_limit"
+CONF_EPG_URL: Final = "epg_url"
 
 DEFAULT_BASE_URL: Final = ""
 DEFAULT_USERNAME: Final = ""

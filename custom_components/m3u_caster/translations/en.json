@@ -38,12 +38,14 @@
         "data": {
           "scan_interval": "Poll interval",
           "epg_limit": "EPG programmes per channel",
+          "epg_url": "XMLTV guide URL (optional)",
           "remote_players": "TVs to add a channel player for",
           "remote_groups": "Channel groups on the channel player",
           "quadstream_username": "QuadStream username (optional)",
           "quadstream_secret": "QuadStream secret"
         },
         "data_description": {
+          "epg_url": "Some panels don't fill in the per-channel guide lookup this integration uses by default, but publish a full XMLTV file at a separate URL, often shown in the panel's own dashboard. Set it here to use that instead: one fetch covers every channel it lists.",
           "remote_players": "One media_player entity per TV. Picking a source on it casts that channel to the TV.",
           "remote_groups": "Leave empty to list every channel."
         }
