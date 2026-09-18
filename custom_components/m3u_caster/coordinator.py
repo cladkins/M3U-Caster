@@ -22,6 +22,9 @@ TITLE_MAX = 40
 # only when its current programme is about to end, plus one full pass this often to catch schedule edits.
 EPG_FULL_REFRESH = timedelta(hours=6)
 EPG_FOLLOWUP_SECS = 5
+# Upper bound on how many upcoming listings a channel carries for the guide's timeline grid, so a
+# channel with a long day of programmes fetched from the XMLTV path doesn't balloon the sensor payload.
+MAX_GRID_PROGRAMMES = 8
 
 
 class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
@@ -78,6 +81,7 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             # and stale, and a mismatched programme from hours ago is worse than showing nothing.
             c["now"] = current
             c["next"] = upcoming
+            c["programmes"] = [p for p in listings if not p["end"] or p["end"] > now_ts][:MAX_GRID_PROGRAMMES]
 
     def _scrub(self, text: str) -> str:
         """Keep the playlist credentials out of log lines: aiohttp errors quote the full request URL."""
@@ -111,6 +115,7 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                 "url": self.api.stream_url(sid),
                 "now": old.get("now"),
                 "next": old.get("next"),
+                "programmes": old.get("programmes", []),
             }
 
         if self.epg_url:
@@ -146,6 +151,11 @@ class M3UCasterCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                     upcoming = listings[1] if len(listings) > 1 else None
                 channels[sid]["now"] = current
                 channels[sid]["next"] = upcoming
+                programmes = sorted(
+                    (p for p in listings if not p.get("end") or p.get("end") > now_ts),
+                    key=lambda p: p.get("start") or now_ts,
+                )
+                channels[sid]["programmes"] = programmes[:MAX_GRID_PROGRAMMES]
 
             await asyncio.gather(*(fetch_epg(sid) for sid in targets))
 

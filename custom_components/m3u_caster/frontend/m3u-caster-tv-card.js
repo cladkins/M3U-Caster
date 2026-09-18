@@ -9,6 +9,14 @@ const CAST_TYPES = [
 ];
 const castLabel = (v) => (CAST_TYPES.find((c) => c.value === v) || { label: v }).label;
 const DEFAULT_APP_LINK = "vlc-x-callback://x-callback-url/stream?url={url}";
+// Guide card timeline-grid layout: a fixed forward-looking window, not tied to how far the backend's
+// programme data happens to reach, so the grid's width stays predictable across channels and groups.
+const GRID_WINDOW_HOURS = 4;
+const GRID_STEP_MIN = 30;
+const GRID_PX_PER_MIN = 3;
+const GRID_MIN_BLOCK_PX = 50;
+const GRID_ROW_PX = 44;
+const GRID_RULER_PX = 28;
 // Channel names/labels come from the IPTV panel, not from us, so they're escaped everywhere they're
 // interpolated into markup, attribute values and text content alike.
 const ESC_MAP = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
@@ -370,11 +378,11 @@ class M3uCasterGuideCard extends HTMLElement {
   static getStubConfig(hass) {
     const guide = Object.keys(hass.states).find((e) => e.startsWith("sensor.") && hass.states[e].attributes.channels);
     const tv = Object.keys(hass.states).find((e) => e.startsWith("media_player.") && !hass.states[e].attributes.target);
-    return { guide: guide || "", targets: tv ? [tv] : [], title: "", app_link: DEFAULT_APP_LINK, auto_confirm: true, target_cast_types: {} };
+    return { guide: guide || "", targets: tv ? [tv] : [], title: "", layout: "list", app_link: DEFAULT_APP_LINK, auto_confirm: true, target_cast_types: {} };
   }
   setConfig(config) {
     if (!config.guide) throw new Error("guide sensor is required");
-    this._config = { targets: [], target_cast_types: {}, app_link: DEFAULT_APP_LINK, auto_confirm: true, ...config };
+    this._config = { targets: [], target_cast_types: {}, layout: "list", app_link: DEFAULT_APP_LINK, auto_confirm: true, ...config };
     this._group = this._group || "";
     this._picker = this._picker || null; // the channel the picker sheet is open for, or null when closed
   }
@@ -476,11 +484,90 @@ class M3uCasterGuideCard extends HTMLElement {
     overlay.querySelectorAll(".target").forEach((b) => b.addEventListener("click", () => this._pick(b.dataset.target)));
     overlay.querySelector(".cancel").addEventListener("click", () => this._closePicker());
   }
+  // --- Timeline grid layout ---
+  _fmtTime(d) { return d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" }); }
+  _gridWindow() {
+    const now = new Date();
+    const start = new Date(now); start.setSeconds(0, 0);
+    start.setMinutes(start.getMinutes() - (start.getMinutes() % GRID_STEP_MIN)); // floor to the grid step
+    return { now, start, minutes: GRID_WINDOW_HOURS * 60 };
+  }
+  _chanRowsHtml(channels, nowMap) {
+    return channels.map((c) => {
+      const logo = c.logo
+        ? `<img src="${esc(c.logo)}" loading="lazy" alt=""/>`
+        : `<span class="mono">${esc((c.name || "?").trim().charAt(0).toUpperCase())}</span>`;
+      const num = c.number ? `${esc(String(c.number))} · ` : "";
+      const badges = (nowMap[c.stream_id] || []).map((n) => `<span class="badge">${esc(n)}</span>`).join("");
+      return `<div class="chan-row" data-stream-id="${esc(c.stream_id)}" role="button" tabindex="0">
+        <div class="logo">${logo}</div>
+        <div class="name">${num}${esc(c.name)}</div>
+        <div class="badges" style="${badges ? "" : "display:none"}">${badges}</div>
+      </div>`;
+    }).join("");
+  }
+  _rulerHtml(win) {
+    const marks = [];
+    for (let m = 0; m <= win.minutes; m += 30) {
+      const t = new Date(win.start.getTime() + m * 60000);
+      marks.push(`<div class="mark" style="left:${m * GRID_PX_PER_MIN}px">${esc(this._fmtTime(t))}</div>`);
+    }
+    return marks.join("");
+  }
+  // One absolutely-positioned block per upcoming programme, clipped to the visible window.
+  _tracksHtml(channels, win) {
+    const widthPx = win.minutes * GRID_PX_PER_MIN;
+    return channels.map((c) => {
+      const blocks = (c.programmes || []).map((p) => {
+        const s = new Date(p.start);
+        const e = p.end ? new Date(p.end) : new Date(win.start.getTime() + win.minutes * 60000);
+        let left = Math.max(0, (s - win.start) / 60000 * GRID_PX_PER_MIN);
+        let right = Math.min(widthPx, (e - win.start) / 60000 * GRID_PX_PER_MIN);
+        if (right <= 0 || left >= widthPx) return "";
+        const width = Math.max(GRID_MIN_BLOCK_PX, right - left);
+        const current = s <= win.now && win.now <= e;
+        return `<div class="block${current ? " current" : ""}" style="left:${left}px;width:${width}px" title="${esc(p.title)}">${esc(p.title)}</div>`;
+      }).join("");
+      return `<div class="track" data-stream-id="${esc(c.stream_id)}" role="button" tabindex="0">${blocks}</div>`;
+    }).join("");
+  }
+  _syncGridScroll(a, b) {
+    let syncing = false;
+    const mirror = (from, to) => { if (syncing) return; syncing = true; to.scrollTop = from.scrollTop; syncing = false; };
+    a.addEventListener("scroll", () => mirror(a, b));
+    b.addEventListener("scroll", () => mirror(b, a));
+  }
+  _renderGrid(channels, nowMap) {
+    const r = this._root;
+    const win = this._gridWindow();
+    const chanCol = r.querySelector(".chan-col");
+    const tracks = r.querySelector(".tracks");
+    const sig = channels.map((c) => c.stream_id).join(",");
+    if (chanCol.dataset.sig !== sig) {
+      chanCol.innerHTML = `<div class="chan-spacer"></div>${this._chanRowsHtml(channels, nowMap)}`;
+      chanCol.dataset.sig = sig;
+    } else {
+      chanCol.querySelectorAll(".chan-row").forEach((row) => {
+        const names = nowMap[row.dataset.streamId] || [];
+        const badgesEl = row.querySelector(".badges");
+        if (badgesEl) { badgesEl.style.display = names.length ? "" : "none"; badgesEl.innerHTML = names.map((n) => `<span class="badge">${esc(n)}</span>`).join(""); }
+      });
+    }
+    r.querySelector(".ruler").innerHTML = this._rulerHtml(win);
+    r.querySelector(".timeline-inner").style.width = `${win.minutes * GRID_PX_PER_MIN}px`;
+    tracks.innerHTML = this._tracksHtml(channels, win);
+    const nowLine = r.querySelector(".now-line");
+    const nowLeft = (win.now - win.start) / 60000 * GRID_PX_PER_MIN;
+    nowLine.style.left = `${nowLeft}px`;
+    nowLine.style.display = nowLeft >= 0 && nowLeft <= win.minutes * GRID_PX_PER_MIN ? "" : "none";
+    nowLine.style.height = `${GRID_RULER_PX + channels.length * GRID_ROW_PX}px`;
+  }
   _render() {
     if (!this._hass || !this._config) return;
     const channels = this._visible();
     const groups = channelGroups(filterChannels(this._channels(), this._config.groups));
     const playlist = (this._hass.states[this._config.guide] || {}).attributes?.playlist || "";
+    const isGrid = this._config.layout === "grid";
     if (!this._root) {
       this._root = this.attachShadow({ mode: "open" });
       this._root.innerHTML = `
@@ -514,23 +601,57 @@ class M3uCasterGuideCard extends HTMLElement {
           button.cancel { width:100%; margin-top:6px; padding:10px; border:0; border-radius:8px;
                           background:var(--secondary-background-color); color:var(--primary-text-color); cursor:pointer; }
           .empty { padding:12px 4px; opacity:.7; font-size:.9em; }
+          .grid { display:flex; border-top:1px solid var(--divider-color); }
+          .chan-col { flex:0 0 130px; overflow-y:auto; overflow-x:hidden; max-height:60vh; scrollbar-width:none; }
+          .chan-col::-webkit-scrollbar { display:none; }
+          .chan-spacer { height:${GRID_RULER_PX}px; }
+          .chan-row { display:flex; align-items:center; gap:6px; height:${GRID_ROW_PX}px; padding:0 6px;
+                      border-bottom:1px solid var(--divider-color); border-right:1px solid var(--divider-color); cursor:pointer; box-sizing:border-box; }
+          .chan-row:hover, .chan-row:active { background:var(--secondary-background-color); }
+          .chan-row .logo { width:22px; height:22px; }
+          .chan-row .name { flex:1; min-width:0; font-size:.78em; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+          .chan-row .badges { flex:0 0 auto; }
+          .timeline-scroll { flex:1; overflow:auto; max-height:60vh; position:relative; }
+          .timeline-inner { position:relative; }
+          .ruler { height:${GRID_RULER_PX}px; position:sticky; top:0; background:var(--card-background-color); z-index:1; border-bottom:1px solid var(--divider-color); }
+          .ruler .mark { position:absolute; top:0; height:100%; font-size:.7em; opacity:.65; padding-left:4px;
+                         border-left:1px solid var(--divider-color); display:flex; align-items:center; white-space:nowrap; }
+          .track { position:relative; height:${GRID_ROW_PX}px; border-bottom:1px solid var(--divider-color); }
+          .block { position:absolute; top:3px; bottom:3px; border-radius:6px; background:var(--secondary-background-color);
+                   overflow:hidden; padding:0 6px; display:flex; align-items:center; font-size:.72em; white-space:nowrap;
+                   text-overflow:ellipsis; cursor:pointer; }
+          .block.current { background:var(--primary-color); color:var(--text-primary-color); }
+          .now-line { position:absolute; top:0; width:2px; background:var(--error-color, red); z-index:2; pointer-events:none; }
         </style>
         <ha-card>
           <div class="hdr"><span class="name"></span><select class="grp"></select></div>
           <div class="list"></div>
+          <div class="grid">
+            <div class="chan-col"></div>
+            <div class="timeline-scroll"><div class="timeline-inner">
+              <div class="ruler"></div>
+              <div class="tracks"></div>
+              <div class="now-line"></div>
+            </div></div>
+          </div>
           <div class="pl"></div>
         </ha-card>
         <div class="picker-overlay"><div class="sheet"></div></div>`;
       this._root.querySelector("select.grp").addEventListener("change", (e) => { this._group = e.target.value; this._render(); });
       const list = this._root.querySelector(".list");
       const rowClick = (e) => {
-        const row = e.target.closest && e.target.closest(".row");
+        const row = e.target.closest && e.target.closest(".row, .chan-row, .track");
         if (!row) return;
         const c = this._visible().find((c) => c.stream_id === row.dataset.streamId);
         if (c) this._openPicker(c);
       };
       list.addEventListener("click", rowClick);
       list.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); rowClick(e); } });
+      const chanCol = this._root.querySelector(".chan-col");
+      const timelineScroll = this._root.querySelector(".timeline-scroll");
+      chanCol.addEventListener("click", rowClick);
+      timelineScroll.addEventListener("click", rowClick);
+      this._syncGridScroll(chanCol, timelineScroll);
       const overlay = this._root.querySelector(".picker-overlay");
       overlay.addEventListener("click", (e) => { if (e.target === overlay) this._closePicker(); });
     }
@@ -538,13 +659,19 @@ class M3uCasterGuideCard extends HTMLElement {
     r.querySelector(".name").textContent = this._config.title || playlist || "Guide";
     syncGroupPicker(r.querySelector("select.grp"), groups, this._group);
     const nowMap = this._targetsNowPlaying();
-    const list = r.querySelector(".list");
-    const sig = channels.map((c) => c.stream_id).join(",");
-    if (list.dataset.sig !== sig) {
-      list.innerHTML = this._rowsHtml(channels, nowMap);
-      list.dataset.sig = sig;
+    r.querySelector(".list").style.display = isGrid ? "none" : "";
+    r.querySelector(".grid").style.display = isGrid ? "flex" : "none";
+    if (isGrid) {
+      this._renderGrid(channels, nowMap);
     } else {
-      this._patchRows(list, channels, nowMap);
+      const list = r.querySelector(".list");
+      const sig = channels.map((c) => c.stream_id).join(",");
+      if (list.dataset.sig !== sig) {
+        list.innerHTML = this._rowsHtml(channels, nowMap);
+        list.dataset.sig = sig;
+      } else {
+        this._patchRows(list, channels, nowMap);
+      }
     }
     r.querySelector(".pl").textContent = playlist ? `Playlist: ${playlist}` : "";
     this._renderPicker();
@@ -552,7 +679,7 @@ class M3uCasterGuideCard extends HTMLElement {
 }
 
 class M3uCasterGuideCardEditor extends HTMLElement {
-  setConfig(config) { this._config = { targets: [], target_cast_types: {}, ...config }; this._render(); }
+  setConfig(config) { this._config = { targets: [], target_cast_types: {}, layout: "list", ...config }; this._render(); }
   set hass(hass) { this._hass = hass; this._render(); }
   _render() {
     if (!this._hass) return;
@@ -560,7 +687,7 @@ class M3uCasterGuideCardEditor extends HTMLElement {
       this._form = document.createElement("ha-form");
       this._form.computeLabel = (s) => ({
         guide: "M3U Caster playlist (guide sensor)", targets: "TVs to offer when a channel is tapped",
-        groups: "Channel groups (empty = all)", title: "Card title (optional)",
+        groups: "Channel groups (empty = all)", title: "Card title (optional)", layout: "Layout",
         app_link: "App link template (used when a TV's cast type is Apple TV app, {url} = stream)",
         auto_confirm: "Auto press Select on the Open prompt (Apple TV app)",
       }[s.name] || s.name);
@@ -594,6 +721,10 @@ class M3uCasterGuideCardEditor extends HTMLElement {
       { name: "guide", required: true, selector: { select: { mode: "dropdown", options: guides.map((e) => ({ value: e, label: `${this._hass.states[e].attributes.playlist || e}` })) } } },
       { name: "targets", required: true, selector: { entity: { domain: "media_player", multiple: true, exclude_entities: ownPlayers } } },
       groupSchema(this._hass, cfg.guide),
+      { name: "layout", selector: { select: { mode: "dropdown", options: [
+        { value: "list", label: "List (channel + current programme)" },
+        { value: "grid", label: "Timeline grid (cable-box style)" },
+      ] } } },
       { name: "app_link", selector: { text: {} } },
       { name: "auto_confirm", selector: { boolean: {} } },
       { name: "title", selector: { text: {} } },

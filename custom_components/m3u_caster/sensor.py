@@ -48,6 +48,10 @@ class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity
                 "logo": c["logo"], "label": c["label"],
                 "now": now.get("title"), "now_start": now.get("start"), "now_end": now.get("end"),
                 "next": nxt.get("title"), "next_start": nxt.get("start"),
+                "programmes": [
+                    {"title": p.get("title"), "start": p.get("start"), "end": p.get("end")}
+                    for p in (c.get("programmes") or [])
+                ],
             })
         casting = {
             player: entry for player, entry in self.hass.data.get(DATA_NOW_CASTING, {}).items()

@@ -36,16 +36,17 @@ The On TV strip shows what the player is doing. On Roku it names the channel the
 
 ## Guide card (tablet)
 
-Add card > M3U Caster Guide Card for a dense, cable-box-style channel list suited to a wall-mounted or handheld tablet: logo, channel number when the panel provides one, and current programme on each row.
+Add card > M3U Caster Guide Card for a dense channel list suited to a wall-mounted or handheld tablet: logo, channel number when the panel provides one, and current programme on each row.
 
 - **Guide sensor**: the playlist this card shows. One playlist per card, same as the other two.
 - **TVs to offer when a channel is tapped**: a fixed list you choose in the editor, not every media_player Home Assistant knows about. Channel player entities from this integration are left out of the picker, since they take a source name rather than a cast command.
 - **Channel groups**: limit the list to these playlist groups. Empty means all, with a dropdown to narrow further on the fly, same as the other cards.
+- **Layout**: **List** (default) is a row per channel with its current programme's title. **Timeline grid** is a cable-box-style grid, channels down the left, a horizontally scrollable timeline across the top with a red "now" line, and a block per upcoming programme sized to its length. The grid shows a fixed 4-hour forward window; scroll it horizontally to see further. Tap any block, or a channel's row in the left column, to open the same TV picker as list mode, tapping always casts that channel live, a block further down the timeline is just showing what's coming up, not something you can schedule. The grid needs a wide screen (tablet or desktop) to be usable; on a phone-width card, stick with List.
 - **Cast type per TV**: once a TV is picked, a row for it appears under the form with its own cast type dropdown (Auto detect, Roku, Apple TV AirPlay, Apple TV app, Chromecast, Generic), same options as the single-TV card. Auto detect is right for most TVs; set a TV's type explicitly to override it.
 - **App link template** and **Auto confirm**: apply to any TV whose cast type is Apple TV app, same as the single-TV card.
 - **Card title**: optional heading. Defaults to the playlist name.
 
-Tap a row to open a sheet listing the configured TVs, each with its current status, and tap a TV to cast there. Tap the TV a channel is already playing on and the sheet stops it instead of re-casting it. A small badge on a row names any configured TV currently showing that channel, so a glance at the list shows what is on without opening the sheet.
+Tap a row (or, in the timeline grid, a row or any programme block) to open a sheet listing the configured TVs, each with its current status, and tap a TV to cast there. Tap the TV a channel is already playing on and the sheet stops it instead of re-casting it. A small badge names any configured TV currently showing that channel, so a glance at the list shows what is on without opening the sheet.
 
 ## QuadStream multiview (Apple TV)
 
@@ -110,7 +111,7 @@ When set, this replaces the per-channel lookup entirely: one fetch of that file 
 One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel count. Attributes:
 
 - `playlist`: the playlist's display name.
-- `channels`: one row per channel with `stream_id`, `name`, `number` (from the panel, when it provides one, else null), `group`, `logo`, `label`, `now`, `now_start`, `now_end`, `next`, `next_start`.
+- `channels`: one row per channel with `stream_id`, `name`, `number` (from the panel, when it provides one, else null), `group`, `logo`, `label`, `now`, `now_start`, `now_end`, `next`, `next_start`, and `programmes` (up to 8 upcoming listings as `{title, start, end}`, used by the Guide Card's timeline grid layout).
 - `now_casting`: media_player entity id to the stream_id last cast there. Casts made through a channel player show up here too, and casts made from the cards show up on the channel player.
 
 Useful for automations. The channel table is not written to the recorder, so a large playlist does not bloat the database.
