@@ -429,7 +429,7 @@ class M3uCasterGuideCard extends HTMLElement {
       const badges = (nowMap[c.stream_id] || []).map((n) => `<span class="badge">${esc(n)}</span>`).join("");
       return `<div class="row" data-stream-id="${esc(c.stream_id)}" role="button" tabindex="0">
         <div class="logo">${logo}</div>
-        <div class="info"><div class="name">${num}${esc(c.name)}</div><div class="now">${esc(c.now ? c.now.title : "")}</div></div>
+        <div class="info"><div class="name">${num}${esc(c.name)}</div><div class="now">${esc(c.now || "")}</div></div>
         <div class="badges" style="${badges ? "" : "display:none"}">${badges}</div>
       </div>`;
     }).join("");
@@ -441,7 +441,7 @@ class M3uCasterGuideCard extends HTMLElement {
       const c = byId[row.dataset.streamId];
       if (!c) return;
       const nowEl = row.querySelector(".now");
-      if (nowEl) nowEl.textContent = c.now ? c.now.title : "";
+      if (nowEl) nowEl.textContent = c.now || "";
       const badgesEl = row.querySelector(".badges");
       if (badgesEl) {
         const names = nowMap[c.stream_id] || [];
