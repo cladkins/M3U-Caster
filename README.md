@@ -115,3 +115,11 @@ One `sensor.m3u_caster_<playlist>_guide` per playlist. State is the channel coun
 - `now_casting`: media_player entity id to the stream_id last cast there. Casts made through a channel player show up here too, and casts made from the cards show up on the channel player.
 
 Useful for automations. The channel table is not written to the recorder, so a large playlist does not bloat the database.
+
+## EPG Programmes sensor
+
+One `sensor.m3u_caster_<playlist>_epg_programmes` per playlist. State is the total number of upcoming programme listings currently held across every channel, the same `programmes` data the guide sensor's `channels` rows carry, summed. A quick way to check the EPG is actually populated without reading through the full channel table, and to catch it going stale or the provider's feed breaking (state drops to 0 or stays flat when it should be moving). Attributes:
+
+- `channels_with_programmes`: how many channels currently have at least one listing.
+- `channels_total`: total channel count, for context on coverage.
+- `source`: `xmltv` when an XMLTV guide URL is configured, `per_channel` otherwise.

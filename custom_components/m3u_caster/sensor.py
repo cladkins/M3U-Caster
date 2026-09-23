@@ -15,7 +15,11 @@ from .coordinator import M3UCasterCoordinator
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: M3UCasterConfigEntry, add: AddEntitiesCallback) -> None:
-    add([M3UCasterGuideSensor(entry.runtime_data, entry.entry_id, entry.data.get(CONF_PLAYLIST_NAME) or entry.title)])
+    playlist_name = entry.data.get(CONF_PLAYLIST_NAME) or entry.title
+    add([
+        M3UCasterGuideSensor(entry.runtime_data, entry.entry_id, playlist_name),
+        M3UCasterEpgCountSensor(entry.runtime_data, entry.entry_id, playlist_name),
+    ])
 
 
 class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity):
@@ -58,3 +62,31 @@ class M3UCasterGuideSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity
             if entry.get("stream_id") in channels
         }
         return {"playlist": self._playlist_name, "channels": rows, "now_casting": casting}
+
+
+class M3UCasterEpgCountSensor(CoordinatorEntity[M3UCasterCoordinator], SensorEntity):
+    """How much EPG data the guide is actually holding right now, a health check for the EPG source."""
+
+    _attr_has_entity_name = True
+    _attr_name = "EPG Programmes"
+    _attr_icon = "mdi:calendar-text"
+    _attr_native_unit_of_measurement = "programmes"
+
+    def __init__(self, coordinator: M3UCasterCoordinator, entry_id: str, playlist_name: str) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{entry_id}_epg_count"
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, entry_id)}, name=f"M3U Caster {playlist_name}", manufacturer="M3U Caster")
+
+    @property
+    def native_value(self) -> int:
+        channels = (self.coordinator.data or {}).get("channels", {})
+        return sum(len(c.get("programmes") or []) for c in channels.values())
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        channels = (self.coordinator.data or {}).get("channels", {})
+        return {
+            "channels_with_programmes": sum(1 for c in channels.values() if c.get("programmes")),
+            "channels_total": len(channels),
+            "source": "xmltv" if self.coordinator.epg_url else "per_channel",
+        }
